@@ -97,9 +97,3 @@
 * User shares doc with AI reviewer email.
 * AI reviews changes automatically within 5 minutes.
 * Comments posted directly in Google Docs with context and deduplication.
-
----
-
-If you want, I can **extend this into a 4th sprint** for **“Future Enhancements Foundation”** so that switching to push notifications instead of polling is easier later — this would align with section 8 of your PRD.
-
-Do you want me to prepare that extra sprint plan?
