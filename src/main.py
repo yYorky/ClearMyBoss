@@ -107,7 +107,7 @@ def main() -> None:
             logger.info("Scheduled job completed")
             logger.info("=" * 60)
         
-        logger.info("Setting up scheduler to run every 5 minutes...")
+        logger.info("Setting up scheduler to run every 1 minute...")
         schedule.every(1).minutes.do(job)
         logger.info("Scheduler configured. Application is now running...")
         logger.info("Press Ctrl+C to stop the application")
