@@ -128,6 +128,6 @@ def reply_to_comment(
     body = {"content": content}
     return (
         service.replies()
-        .create(fileId=file_id, commentId=comment_id, body=body)
+        .create(fileId=file_id, commentId=comment_id, body=body, fields="id")
         .execute()
     )
