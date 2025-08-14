@@ -11,6 +11,7 @@ from .google_drive import (
     get_app_properties,
     get_share_message,
     update_app_properties,
+    reply_to_comment,
 )
 
 
@@ -135,13 +136,38 @@ def review_document(
 
 
 def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, str]]) -> None:
-    """Post review items as comments on the document."""
+    """Post review items as comments on the document.
+
+    If a comment exceeds the 4096 byte limit imposed by the Google Drive
+    API, the comment is split into multiple parts. The first part is posted
+    as a comment anchored to the relevant text range; subsequent parts are
+    added as replies to the first comment.
+    """
+
+    MAX_BYTES = 4096
+
+    def _chunk_content(text: str) -> List[str]:
+        """Split ``text`` into <= ``MAX_BYTES`` byte chunks."""
+        chunks: List[str] = []
+        encoded = text.encode("utf-8")
+        while encoded:
+            piece = encoded[:MAX_BYTES]
+            chunk = piece.decode("utf-8", errors="ignore")
+            chunks.append(chunk)
+            encoded = encoded[len(chunk.encode("utf-8")) :]
+        return chunks
+
     for item in items:
         content = f"AI Reviewer: {item['hash']}\n{item['suggestion']}"
-        create_comment(
+        parts = _chunk_content(content)
+        # Post the first part anchored to the text range
+        comment = create_comment(
             drive_service,
             document_id,
-            content,
+            parts[0],
             item.get("start_index"),
             item.get("end_index"),
         )
+        # Post remaining parts as replies
+        for part in parts[1:]:
+            reply_to_comment(drive_service, document_id, comment["id"], part)
