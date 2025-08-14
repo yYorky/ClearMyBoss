@@ -71,7 +71,7 @@ def test_create_and_reply_comment():
 
     reply_to_comment(service, "file", "c1", "thanks")
     service.replies.return_value.create.assert_called_once_with(
-        fileId="file", commentId="c1", body={"content": "thanks"}
+        fileId="file", commentId="c1", body={"content": "thanks"}, fields="id"
     )
 
 
