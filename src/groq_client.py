@@ -9,8 +9,10 @@ from requests.exceptions import HTTPError, RequestException
 
 from config import settings
 
-# Groq's OpenAI-compatible endpoint for text completions
-GROQ_API_URL = "https://api.groq.com/openai/v1/completions"
+# Groq's OpenAI-compatible endpoint for chat completions
+# https://console.groq.com/docs shows that the API mirrors OpenAI's
+# `/chat/completions` route rather than the legacy `/completions` path.
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 PROMPT_TEMPLATE = "Review the following text for grammar and style:\n\n{text}"
 
 def get_suggestions(
@@ -30,7 +32,7 @@ def get_suggestions(
     payload = {
         # Use a current model
         "model": "llama-3.1-8b-instant",
-        "prompt": prompt,
+        "messages": [{"role": "user", "content": prompt}],
         # Keep completions modest; oversized requests can 400 with context errors.
         "temperature": 0.2,
         "max_tokens": 800,
