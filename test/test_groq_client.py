@@ -1,6 +1,6 @@
 import pytest
 
-from src.groq_client import GROQ_API_URL, get_suggestions
+from src.groq_client import GROQ_API_URL, CHUNK_SIZE, get_suggestions
 from src.main import groq_suggest
 
 
@@ -79,3 +79,27 @@ def test_groq_suggest_extracts_message_content(monkeypatch):
     monkeypatch.setattr("src.main.get_suggestions", fake_get_suggestions)
     result = groq_suggest("text", "context")
     assert result["suggestion"] == "Suggestion here"
+
+
+def test_get_suggestions_chunks_large_text(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_post(url, json, headers, timeout):
+        calls["count"] += 1
+
+        class Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"choices": [{"message": {"content": "ok"}}]}
+
+        return Resp()
+
+    monkeypatch.setattr("requests.post", fake_post)
+    large_text = "x" * (CHUNK_SIZE * 2 + 10)
+    resp = get_suggestions(large_text)
+    assert calls["count"] == 3
+    assert resp["choices"][0]["message"]["content"] == "ok" * 3
