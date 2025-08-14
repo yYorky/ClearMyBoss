@@ -85,6 +85,8 @@ def test_review_document_pipeline():
     assert len(items) == 1
     assert items[0]["suggestion"] == "Fix typo"
     assert captured["context"] == "share msg"
+    assert items[0]["start_index"] == len("para1")
+    assert items[0]["end_index"] == len("para1") + len("para2 updated")
 
     expected_hash = _hash("Fix typo", "para2 updated")
     update_body = drive.files.return_value.update.call_args.kwargs["body"]
@@ -97,9 +99,11 @@ def test_post_comments_calls_create(monkeypatch):
     calls = []
 
     def fake_create(service, file_id, content, start_index=None, end_index=None):
-        calls.append((file_id, content))
+        calls.append((file_id, content, start_index, end_index))
 
     monkeypatch.setattr("src.review.create_comment", fake_create)
-    items = [{"suggestion": "Fix typo"}]
+    items = [
+        {"suggestion": "Fix typo", "hash": "abcd", "start_index": 1, "end_index": 3}
+    ]
     post_comments("svc", "doc1", items)
-    assert calls == [("doc1", "Fix typo")]
+    assert calls == [("doc1", "AI Reviewer: abcd\nFix typo", 1, 3)]

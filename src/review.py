@@ -57,6 +57,12 @@ def process_changed_ranges(
     context: str = "",
 ) -> List[Dict[str, str]]:
     """Run ``suggest_fn`` on changed text ranges and format results."""
+    # Pre-compute cumulative character offsets for each paragraph so we can
+    # derive ``start_index``/``end_index`` for changed ranges.
+    offsets: List[int] = [0]
+    for para in paragraphs:
+        offsets.append(offsets[-1] + len(para))
+
     items: List[Dict[str, str]] = []
     for start, end in changed_ranges:
         text = "".join(paragraphs[start : end + 1])
@@ -67,6 +73,8 @@ def process_changed_ranges(
                 "suggestion": response.get("suggestion", ""),
                 "severity": response.get("severity", "info"),
                 "quote": text,
+                "start_index": offsets[start],
+                "end_index": offsets[end + 1],
             }
         )
     return items
@@ -129,4 +137,11 @@ def review_document(
 def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, str]]) -> None:
     """Post review items as comments on the document."""
     for item in items:
-        create_comment(drive_service, document_id, item["suggestion"])
+        content = f"AI Reviewer: {item['hash']}\n{item['suggestion']}"
+        create_comment(
+            drive_service,
+            document_id,
+            content,
+            item.get("start_index"),
+            item.get("end_index"),
+        )
