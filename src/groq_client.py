@@ -24,8 +24,7 @@ PROMPT_TEMPLATE = "Review the following text for grammar and style:\n\n{text}"
 SYSTEM_PROMPT = (
     "You are an AI reviewer. Provide clear, concise, and useful feedback only."
 )
-# Maximum bytes of text per request. Default derives from a 3MB document
-# split across 30 requests (about 100KB). Can be overridden via
+# Maximum bytes of text per request. Default tested at 20KB. Can be overridden via
 # ``GROQ_CHUNK_SIZE`` environment variable.
 CHUNK_SIZE = settings.GROQ_CHUNK_SIZE
 
