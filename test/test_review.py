@@ -96,14 +96,49 @@ def test_review_document_pipeline():
 
 
 def test_post_comments_calls_create(monkeypatch):
-    calls = []
+    create_calls = []
+    reply_calls = []
 
     def fake_create(service, file_id, content, start_index=None, end_index=None):
-        calls.append((file_id, content, start_index, end_index))
+        create_calls.append((file_id, content, start_index, end_index))
+        return {"id": "c1"}
+
+    def fake_reply(service, file_id, comment_id, content):
+        reply_calls.append((file_id, comment_id, content))
 
     monkeypatch.setattr("src.review.create_comment", fake_create)
+    monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
     items = [
         {"suggestion": "Fix typo", "hash": "abcd", "start_index": 1, "end_index": 3}
     ]
     post_comments("svc", "doc1", items)
-    assert calls == [("doc1", "AI Reviewer: abcd\nFix typo", 1, 3)]
+    assert create_calls == [("doc1", "AI Reviewer: abcd\nFix typo", 1, 3)]
+    assert reply_calls == []
+
+
+def test_post_comments_splits_long_comments(monkeypatch):
+    create_calls = []
+    reply_calls = []
+
+    def fake_create(service, file_id, content, start_index=None, end_index=None):
+        create_calls.append((file_id, content, start_index, end_index))
+        return {"id": "c1"}
+
+    def fake_reply(service, file_id, comment_id, content):
+        reply_calls.append((file_id, comment_id, content))
+
+    monkeypatch.setattr("src.review.create_comment", fake_create)
+    monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
+
+    long_text = "a" * 5000
+    items = [
+        {"suggestion": long_text, "hash": "h", "start_index": 0, "end_index": 1}
+    ]
+    post_comments("svc", "doc1", items)
+
+    # First chunk is posted as the main comment, remaining as replies
+    assert len(create_calls) == 1
+    assert len(reply_calls) == 1
+    # Ensure the created comment respects size limit
+    assert len(create_calls[0][1].encode("utf-8")) <= 4096
+    assert len(reply_calls[0][2].encode("utf-8")) <= 4096

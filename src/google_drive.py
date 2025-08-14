@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import os
 from typing import List, Dict, Any
 
 from google.oauth2 import service_account
@@ -13,9 +14,28 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 def build_drive_service() -> Any:
-    """Build an authenticated Drive API service using service account credentials."""
+    """Build an authenticated Drive API service using service account credentials.
+
+    Raises
+    ------
+    ValueError
+        If ``GOOGLE_SERVICE_ACCOUNT_JSON`` is not set in the environment.
+    FileNotFoundError
+        If the path specified by ``GOOGLE_SERVICE_ACCOUNT_JSON`` does not exist.
+    """
+
+    cred_path = settings.GOOGLE_SERVICE_ACCOUNT_JSON
+    if not cred_path:
+        raise ValueError(
+            "GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set."
+        )
+    if not os.path.exists(cred_path):
+        raise FileNotFoundError(
+            f"Service account JSON file not found at {cred_path}"
+        )
+
     creds = service_account.Credentials.from_service_account_file(
-        settings.GOOGLE_SERVICE_ACCOUNT_JSON, scopes=SCOPES
+        cred_path, scopes=SCOPES
     )
     service = build("drive", "v3", credentials=creds)
     return service
@@ -108,6 +128,6 @@ def reply_to_comment(
     body = {"content": content}
     return (
         service.replies()
-        .create(fileId=file_id, commentId=comment_id, body=body)
+        .create(fileId=file_id, commentId=comment_id, body=body, fields="id")
         .execute()
     )

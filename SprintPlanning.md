@@ -118,33 +118,33 @@
 
 ---
 
-## **Sprint 5 – Monitoring & Optimization** (1 week)
+## **Sprint 5 – Reviewer Precision & Persona** (1 week)
 
-**Goal:** Provide visibility into Groq usage and optimize document processing to avoid excessive calls.
+**Goal:** Enable the AI reviewer to give targeted feedback with a clear boss-like persona.
 
 **Tasks:**
 
-1. **Usage Logging & Metrics**
+1. **Section-Level Commenting**
 
-   * Log request counts, retry attempts, and rate-limit events.
-   * Expose basic metrics dashboard or CLI summary for monitoring.
-2. **Chunking Optimization**
+   * Allow AI to anchor comments to specific document ranges.
+   * Include quoted text so feedback highlights the exact section.
+2. **Comment Thread Handling**
 
-   * Merge small paragraphs to reduce number of Groq calls.
-   * Cache suggestions for identical text segments when possible.
-3. **Load Testing**
+   * Track comment authors to ensure the reviewer only replies to user comments.
+   * Prevent AI from responding to its own previous remarks.
+3. **System Prompt & Persona**
 
-   * Simulate processing multiple large documents to ensure throttling prevents `429` errors.
-   * Add automated test that runs review pipeline against mocked Groq service under heavy load.
-4. **Runbook & Alerting**
+   * Craft a system prompt that sets the tone of a boss reviewing work.
+   * Integrate the prompt into the review pipeline for consistent behaviour.
+4. **Testing & Validation**
 
-   * Document procedures for handling persistent rate limits.
-   * Add alert when 429 frequency exceeds threshold.
+   * Unit tests for comment filtering and section targeting.
+   * Manual review to confirm persona and specific feedback.
 
 ---
 
 ✅ **End State after Sprint 5:**
 
-* System gracefully backs off and respects Groq rate limits.
-* Monitoring surfaces API usage and rate-limit events.
-* Multiple documents can be processed without triggering 429 errors.
+* Reviewer highlights exact text segments in its comments.
+* AI responds only to human-authored comments.
+* System prompt ensures consistent "boss" persona in all feedback.
