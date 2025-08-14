@@ -4,6 +4,13 @@ from typing import Any, Callable, Dict, List, Set, Tuple
 import hashlib
 from difflib import SequenceMatcher
 
+from .google_docs import get_document_paragraphs
+from .google_drive import (
+    download_revision_text,
+    get_app_properties,
+    update_app_properties,
+)
+
 
 def get_last_reviewed_revision(app_properties: Dict[str, str]) -> str | None:
     """Return stored ``lastReviewedRevisionId`` if present."""
@@ -79,4 +86,35 @@ def deduplicate_suggestions(
         new_item["hash"] = h
         unique.append(new_item)
         existing_hashes.add(h)
+    return unique
+
+
+def review_document(
+    drive_service: Any,
+    docs_service: Any,
+    document_id: str,
+    suggest_fn: Callable[[str], Dict[str, Any]],
+) -> List[Dict[str, str]]:
+    """End-to-end review pipeline for a single document."""
+    app_properties, head_revision = get_app_properties(drive_service, document_id)
+    last_revision = get_last_reviewed_revision(app_properties)
+
+    current_paragraphs = get_document_paragraphs(docs_service, document_id)
+    old_paragraphs: List[str] = []
+    if last_revision:
+        old_text = download_revision_text(drive_service, document_id, last_revision)
+        old_paragraphs = old_text.splitlines()
+
+    changed = detect_changed_ranges(old_paragraphs, current_paragraphs)
+    items = process_changed_ranges(current_paragraphs, changed, suggest_fn)
+
+    existing_hashes = set()
+    if app_properties.get("suggestionHashes"):
+        existing_hashes = set(app_properties["suggestionHashes"].split(","))
+    unique = deduplicate_suggestions(items, existing_hashes)
+
+    app_properties["suggestionHashes"] = ",".join(sorted(existing_hashes))
+    update_last_reviewed_revision(app_properties, head_revision)
+    update_app_properties(drive_service, document_id, app_properties)
+
     return unique
