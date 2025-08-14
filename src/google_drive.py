@@ -71,3 +71,39 @@ def download_revision_text(service: Any, file_id: str, revision_id: str) -> str:
     if isinstance(content, bytes):
         return content.decode()
     return content
+
+
+def get_share_message(service: Any, file_id: str) -> str:
+    """Return the file's description to use as share message context."""
+    result = (
+        service.files()
+        .get(fileId=file_id, fields="description")
+        .execute()
+    )
+    return result.get("description", "")
+
+
+def create_comment(
+    service: Any,
+    file_id: str,
+    content: str,
+    start_index: int | None = None,
+    end_index: int | None = None,
+) -> Any:
+    """Create a comment on ``file_id`` anchored to the given range."""
+    body: Dict[str, Any] = {"content": content}
+    if start_index is not None and end_index is not None:
+        body["anchor"] = f"{start_index},{end_index}"
+    return service.comments().create(fileId=file_id, body=body).execute()
+
+
+def reply_to_comment(
+    service: Any, file_id: str, comment_id: str, content: str
+) -> Any:
+    """Reply to an existing comment thread."""
+    body = {"content": content}
+    return (
+        service.replies()
+        .create(fileId=file_id, commentId=comment_id, body=body)
+        .execute()
+    )
