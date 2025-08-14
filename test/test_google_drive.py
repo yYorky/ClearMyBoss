@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
+import pytest
 
 from src.google_drive import (
     download_revision_text,
@@ -9,6 +10,7 @@ from src.google_drive import (
     list_recent_docs,
     reply_to_comment,
     update_app_properties,
+    build_drive_service,
 )
 
 
@@ -71,3 +73,12 @@ def test_create_and_reply_comment():
     service.replies.return_value.create.assert_called_once_with(
         fileId="file", commentId="c1", body={"content": "thanks"}
     )
+
+
+def test_build_drive_service_missing_credentials(monkeypatch):
+    """Should raise a clear error when credential path is not configured."""
+    monkeypatch.setattr(
+        "src.google_drive.settings.GOOGLE_SERVICE_ACCOUNT_JSON", None
+    )
+    with pytest.raises(ValueError):
+        build_drive_service()
