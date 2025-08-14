@@ -92,8 +92,58 @@
 
 ---
 
-✅ **End State after Sprint 3:**
+## **Sprint 4 – Groq Rate Limit Resilience** (1 week)
 
-* User shares doc with AI reviewer email.
-* AI reviews changes automatically within 5 minutes.
-* Comments posted directly in Google Docs with context and deduplication.
+**Goal:** Prevent "429 Too Many Requests" errors by throttling requests and handling rate limits gracefully.
+
+**Tasks:**
+
+1. **Rate Limit Research**
+
+   * Review Groq API documentation and headers to determine allowed request rates.
+   * Define configurable limits (requests per minute / concurrent calls).
+2. **Centralized Throttling**
+
+   * Implement lightweight rate limiter or queue for Groq requests.
+   * Ensure document chunks are processed sequentially when limits are reached.
+3. **Enhanced Retry Logic**
+
+   * Detect `429` responses in `get_suggestions`.
+   * Respect `Retry-After` header and apply exponential backoff with jitter.
+4. **Testing**
+
+   * Unit test simulating repeated `429` responses to verify retry/backoff behavior.
+   * Integration test confirming throttler limits parallel requests.
+
+---
+
+## **Sprint 5 – Monitoring & Optimization** (1 week)
+
+**Goal:** Provide visibility into Groq usage and optimize document processing to avoid excessive calls.
+
+**Tasks:**
+
+1. **Usage Logging & Metrics**
+
+   * Log request counts, retry attempts, and rate-limit events.
+   * Expose basic metrics dashboard or CLI summary for monitoring.
+2. **Chunking Optimization**
+
+   * Merge small paragraphs to reduce number of Groq calls.
+   * Cache suggestions for identical text segments when possible.
+3. **Load Testing**
+
+   * Simulate processing multiple large documents to ensure throttling prevents `429` errors.
+   * Add automated test that runs review pipeline against mocked Groq service under heavy load.
+4. **Runbook & Alerting**
+
+   * Document procedures for handling persistent rate limits.
+   * Add alert when 429 frequency exceeds threshold.
+
+---
+
+✅ **End State after Sprint 5:**
+
+* System gracefully backs off and respects Groq rate limits.
+* Monitoring surfaces API usage and rate-limit events.
+* Multiple documents can be processed without triggering 429 errors.
