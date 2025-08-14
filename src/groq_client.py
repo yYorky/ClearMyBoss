@@ -3,11 +3,14 @@ from __future__ import annotations
 
 from typing import Any, Dict, Iterable
 
+import logging
 import time
 import requests
 from requests.exceptions import HTTPError, RequestException
 
 from config import settings
+
+logger = logging.getLogger(__name__)
 
 # Groq's OpenAI-compatible endpoint for chat completions
 # https://console.groq.com/docs shows that the API mirrors OpenAI's
@@ -64,7 +67,32 @@ def get_suggestions(
                     err_body = exc.response.json()
                 except Exception:
                     err_body = {"text": getattr(exc.response, "text", "")}
-                if status and 500 <= status < 600 and attempt < retries:
+                if status == 429 and attempt < retries:
+                    retry_after = (
+                        exc.response.headers.get("Retry-After")
+                        if exc.response
+                        else None
+                    )
+                    try:
+                        wait = float(retry_after)
+                    except (TypeError, ValueError):
+                        wait = _backoff
+                    logger.warning(
+                        "Groq rate limited (429). Retrying in %s seconds (attempt %s/%s)",
+                        wait,
+                        attempt,
+                        retries,
+                    )
+                    time.sleep(wait)
+                    _backoff *= 2
+                elif status and 500 <= status < 600 and attempt < retries:
+                    logger.warning(
+                        "Groq HTTP %s. Retrying in %s seconds (attempt %s/%s)",
+                        status,
+                        _backoff,
+                        attempt,
+                        retries,
+                    )
                     time.sleep(_backoff)
                     _backoff *= 2
                 else:
@@ -73,6 +101,13 @@ def get_suggestions(
             except RequestException as exc:
                 last_exc = exc
                 if attempt < retries:
+                    logger.warning(
+                        "Request error %s. Retrying in %s seconds (attempt %s/%s)",
+                        exc,
+                        _backoff,
+                        attempt,
+                        retries,
+                    )
                     time.sleep(_backoff)
                     _backoff *= 2
                 else:
