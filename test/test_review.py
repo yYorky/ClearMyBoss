@@ -4,6 +4,7 @@ from src.review import (
     _hash,
     deduplicate_suggestions,
     detect_changed_ranges,
+    post_comments,
     review_document,
 )
 
@@ -35,10 +36,25 @@ def test_deduplicate_suggestions():
 
 def test_review_document_pipeline():
     drive = MagicMock()
-    drive.files.return_value.get.return_value.execute.return_value = {
-        "appProperties": {"lastReviewedRevisionId": "1", "suggestionHashes": "abcd"},
-        "headRevisionId": "2",
-    }
+
+    def files_get(fileId=None, fields=None):
+        if fields == "appProperties, headRevisionId":
+            return MagicMock(
+                execute=MagicMock(
+                    return_value={
+                        "appProperties": {
+                            "lastReviewedRevisionId": "1",
+                            "suggestionHashes": "abcd",
+                        },
+                        "headRevisionId": "2",
+                    }
+                )
+            )
+        if fields == "description":
+            return MagicMock(execute=MagicMock(return_value={"description": "share msg"}))
+        return MagicMock(execute=MagicMock(return_value={}))
+
+    drive.files.return_value.get.side_effect = files_get
     drive.revisions.return_value.get.return_value.execute.return_value = (
         "para1\npara2\n"
     )
@@ -59,15 +75,35 @@ def test_review_document_pipeline():
         }
     }
 
-    def suggest(_text: str):
+    captured = {}
+
+    def suggest(_text: str, context: str):
+        captured["context"] = context
         return {"issue": "typo", "suggestion": "Fix typo", "severity": "major"}
 
     items = review_document(drive, docs, "doc1", suggest)
     assert len(items) == 1
     assert items[0]["suggestion"] == "Fix typo"
+    assert captured["context"] == "share msg"
+    assert items[0]["start_index"] == len("para1")
+    assert items[0]["end_index"] == len("para1") + len("para2 updated")
 
     expected_hash = _hash("Fix typo", "para2 updated")
     update_body = drive.files.return_value.update.call_args.kwargs["body"]
     assert update_body["appProperties"]["lastReviewedRevisionId"] == "2"
     assert expected_hash in update_body["appProperties"]["suggestionHashes"]
     assert "abcd" in update_body["appProperties"]["suggestionHashes"]
+
+
+def test_post_comments_calls_create(monkeypatch):
+    calls = []
+
+    def fake_create(service, file_id, content, start_index=None, end_index=None):
+        calls.append((file_id, content, start_index, end_index))
+
+    monkeypatch.setattr("src.review.create_comment", fake_create)
+    items = [
+        {"suggestion": "Fix typo", "hash": "abcd", "start_index": 1, "end_index": 3}
+    ]
+    post_comments("svc", "doc1", items)
+    assert calls == [("doc1", "AI Reviewer: abcd\nFix typo", 1, 3)]

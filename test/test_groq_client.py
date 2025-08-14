@@ -1,6 +1,7 @@
 import pytest
 
-from src.groq_client import GROQ_API_URL, get_suggestions
+from src.groq_client import GROQ_API_URL, CHUNK_SIZE, get_suggestions
+from src.main import groq_suggest
 
 
 def test_get_suggestions_calls_api(monkeypatch):
@@ -13,6 +14,7 @@ def test_get_suggestions_calls_api(monkeypatch):
         captured["timeout"] = timeout
 
         class Resp:
+            status_code = 200
             def raise_for_status(self):
                 pass
 
@@ -26,7 +28,7 @@ def test_get_suggestions_calls_api(monkeypatch):
     assert resp == {"choices": []}
     assert captured["url"] == GROQ_API_URL
     assert "Authorization" in captured["headers"]
-    assert "Some text" in captured["json"]["prompt"]
+    assert captured["json"]["messages"][0]["content"].startswith("Review the following")
 
 
 def test_get_suggestions_retries_on_server_error(monkeypatch):
@@ -68,3 +70,36 @@ def test_get_suggestions_raises_after_retries(monkeypatch):
     monkeypatch.setattr("requests.post", fake_post)
     with pytest.raises(Exception):
         get_suggestions("fail", retries=2, backoff=0)
+
+
+def test_groq_suggest_extracts_message_content(monkeypatch):
+    def fake_get_suggestions(prompt):
+        return {"choices": [{"message": {"content": "Suggestion here"}}]}
+
+    monkeypatch.setattr("src.main.get_suggestions", fake_get_suggestions)
+    result = groq_suggest("text", "context")
+    assert result["suggestion"] == "Suggestion here"
+
+
+def test_get_suggestions_chunks_large_text(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_post(url, json, headers, timeout):
+        calls["count"] += 1
+
+        class Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"choices": [{"message": {"content": "ok"}}]}
+
+        return Resp()
+
+    monkeypatch.setattr("requests.post", fake_post)
+    large_text = "x" * (CHUNK_SIZE * 2 + 10)
+    resp = get_suggestions(large_text)
+    assert calls["count"] == 3
+    assert resp["choices"][0]["message"]["content"] == "ok" * 3

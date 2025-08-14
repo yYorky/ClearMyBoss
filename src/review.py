@@ -6,8 +6,10 @@ from difflib import SequenceMatcher
 
 from .google_docs import get_document_paragraphs
 from .google_drive import (
+    create_comment,
     download_revision_text,
     get_app_properties,
+    get_share_message,
     update_app_properties,
 )
 
@@ -51,19 +53,28 @@ def detect_changed_ranges(
 def process_changed_ranges(
     paragraphs: List[str],
     changed_ranges: List[Tuple[int, int]],
-    suggest_fn: Callable[[str], Dict[str, Any]],
+    suggest_fn: Callable[[str, str], Dict[str, Any]],
+    context: str = "",
 ) -> List[Dict[str, str]]:
     """Run ``suggest_fn`` on changed text ranges and format results."""
+    # Pre-compute cumulative character offsets for each paragraph so we can
+    # derive ``start_index``/``end_index`` for changed ranges.
+    offsets: List[int] = [0]
+    for para in paragraphs:
+        offsets.append(offsets[-1] + len(para))
+
     items: List[Dict[str, str]] = []
     for start, end in changed_ranges:
         text = "".join(paragraphs[start : end + 1])
-        response = suggest_fn(text)
+        response = suggest_fn(text, context)
         items.append(
             {
                 "issue": response.get("issue", ""),
                 "suggestion": response.get("suggestion", ""),
                 "severity": response.get("severity", "info"),
                 "quote": text,
+                "start_index": offsets[start],
+                "end_index": offsets[end + 1],
             }
         )
     return items
@@ -93,11 +104,12 @@ def review_document(
     drive_service: Any,
     docs_service: Any,
     document_id: str,
-    suggest_fn: Callable[[str], Dict[str, Any]],
+    suggest_fn: Callable[[str, str], Dict[str, Any]],
 ) -> List[Dict[str, str]]:
     """End-to-end review pipeline for a single document."""
     app_properties, head_revision = get_app_properties(drive_service, document_id)
     last_revision = get_last_reviewed_revision(app_properties)
+    context = get_share_message(drive_service, document_id)
 
     current_paragraphs = get_document_paragraphs(docs_service, document_id)
     old_paragraphs: List[str] = []
@@ -106,7 +118,9 @@ def review_document(
         old_paragraphs = old_text.splitlines()
 
     changed = detect_changed_ranges(old_paragraphs, current_paragraphs)
-    items = process_changed_ranges(current_paragraphs, changed, suggest_fn)
+    items = process_changed_ranges(
+        current_paragraphs, changed, suggest_fn, context=context
+    )
 
     existing_hashes = set()
     if app_properties.get("suggestionHashes"):
@@ -118,3 +132,16 @@ def review_document(
     update_app_properties(drive_service, document_id, app_properties)
 
     return unique
+
+
+def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, str]]) -> None:
+    """Post review items as comments on the document."""
+    for item in items:
+        content = f"AI Reviewer: {item['hash']}\n{item['suggestion']}"
+        create_comment(
+            drive_service,
+            document_id,
+            content,
+            item.get("start_index"),
+            item.get("end_index"),
+        )

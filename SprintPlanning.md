@@ -77,6 +77,7 @@
 
    * Implement scheduled runner (Flask + cron job or Python `schedule`) to check every 3–5 minutes.
    * Ensure it runs locally as a persistent process.
+   * Expose the runner through a `main.py` entry point so the backend can be started with a single command and listen for new documents shared to the service account email.
 3. **Performance & Error Handling**
 
    * Add retries for API failures.
