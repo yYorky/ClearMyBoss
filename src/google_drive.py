@@ -94,7 +94,11 @@ def create_comment(
     body: Dict[str, Any] = {"content": content}
     if start_index is not None and end_index is not None:
         body["anchor"] = f"{start_index},{end_index}"
-    return service.comments().create(fileId=file_id, body=body).execute()
+    return (
+        service.comments()
+        .create(fileId=file_id, body=body, fields="id")
+        .execute()
+    )
 
 
 def reply_to_comment(
