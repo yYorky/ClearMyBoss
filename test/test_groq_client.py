@@ -103,3 +103,51 @@ def test_get_suggestions_chunks_large_text(monkeypatch):
     resp = get_suggestions(large_text)
     assert calls["count"] == 3
     assert resp["choices"][0]["message"]["content"] == "ok" * 3
+
+
+def test_get_suggestions_retries_on_429(monkeypatch):
+    calls = {"count": 0}
+
+    def fake_post(url, json, headers, timeout):
+        class Resp:
+            def __init__(self, status):
+                self.status_code = status
+                self.headers = {"Retry-After": "1"} if status == 429 else {}
+
+            def raise_for_status(self):
+                if self.status_code >= 400:
+                    from requests import HTTPError
+
+                    raise HTTPError(response=self)
+
+            def json(self):
+                return {"choices": []}
+
+        calls["count"] += 1
+        return Resp(429 if calls["count"] == 1 else 200)
+
+    sleeps: list[float] = []
+
+    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("time.sleep", lambda s: sleeps.append(s))
+    monkeypatch.setattr("random.uniform", lambda a, b: 0)
+    monkeypatch.setattr("src.groq_client.rate_limiter.acquire", lambda: None)
+
+    resp = get_suggestions("ok", retries=2, backoff=0.5)
+    assert resp == {"choices": []}
+    assert sleeps == [1.0]
+
+
+def test_rate_limiter_enforces_interval(monkeypatch):
+    from src.groq_client import RateLimiter
+
+    times = [100.0]
+    monkeypatch.setattr("time.time", lambda: times[0])
+    sleeps: list[float] = []
+    monkeypatch.setattr("time.sleep", lambda s: sleeps.append(s))
+
+    rl = RateLimiter(2)  # 2 requests per minute => 30s interval
+    rl.acquire()  # first call, no sleep
+    rl.acquire()  # second call immediately should sleep 30 seconds
+
+    assert sleeps == [30.0]
