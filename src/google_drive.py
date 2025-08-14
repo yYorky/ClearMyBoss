@@ -9,7 +9,7 @@ from googleapiclient.discovery import build
 
 from config import settings
 
-SCOPES = ["https://www.googleapis.com/auth/drive.readonly"]
+SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 def build_drive_service() -> Any:
@@ -40,3 +40,34 @@ def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]
         .execute()
     )
     return results.get("files", [])
+
+
+def get_app_properties(service: Any, file_id: str) -> tuple[Dict[str, str], str]:
+    """Return ``appProperties`` and ``headRevisionId`` for ``file_id``."""
+    result = (
+        service.files()
+        .get(fileId=file_id, fields="appProperties, headRevisionId")
+        .execute()
+    )
+    return result.get("appProperties", {}), result.get("headRevisionId", "")
+
+
+def update_app_properties(
+    service: Any, file_id: str, app_properties: Dict[str, str]
+) -> None:
+    """Update ``appProperties`` for ``file_id``."""
+    service.files().update(
+        fileId=file_id, body={"appProperties": app_properties}
+    ).execute()
+
+
+def download_revision_text(service: Any, file_id: str, revision_id: str) -> str:
+    """Download revision content as plain text."""
+    content = (
+        service.revisions()
+        .get(fileId=file_id, revisionId=revision_id, alt="media")
+        .execute()
+    )
+    if isinstance(content, bytes):
+        return content.decode()
+    return content
