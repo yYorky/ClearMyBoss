@@ -64,7 +64,7 @@ def test_create_and_reply_comment():
     service = MagicMock()
     create_comment(service, "file", "hello", 1, 5)
     service.comments.return_value.create.assert_called_once_with(
-        fileId="file", body={"content": "hello", "anchor": "1,5"}
+        fileId="file", body={"content": "hello", "anchor": "1,5"}, fields="id"
     )
 
     reply_to_comment(service, "file", "c1", "thanks")

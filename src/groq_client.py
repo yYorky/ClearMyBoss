@@ -9,7 +9,8 @@ from requests.exceptions import HTTPError, RequestException
 
 from config import settings
 
-GROQ_API_URL = "https://api.groq.com/v1/completions"
+# Updated base URL to match Groq's OpenAI-compatible endpoint
+GROQ_API_URL = "https://api.groq.com/openai/v1/completions"
 PROMPT_TEMPLATE = "Review the following text for grammar and style:\n\n{text}"
 
 
