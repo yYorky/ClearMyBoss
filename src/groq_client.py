@@ -9,7 +9,8 @@ from requests.exceptions import HTTPError, RequestException
 
 from config import settings
 
-GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# Groq's OpenAI-compatible endpoint for text completions
+GROQ_API_URL = "https://api.groq.com/openai/v1/completions"
 PROMPT_TEMPLATE = "Review the following text for grammar and style:\n\n{text}"
 
 def get_suggestions(
@@ -27,12 +28,9 @@ def get_suggestions(
     prompt = prompt_template.format(text=text)
 
     payload = {
-        # Use a current model:
+        # Use a current model
         "model": "llama-3.1-8b-instant",
-        "messages": [
-            {"role": "system", "content": "You are a document reviewer and editor."},
-            {"role": "user", "content": prompt},
-        ],
+        "prompt": prompt,
         # Keep completions modest; oversized requests can 400 with context errors.
         "temperature": 0.2,
         "max_tokens": 800,

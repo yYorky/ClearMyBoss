@@ -13,6 +13,7 @@ def test_get_suggestions_calls_api(monkeypatch):
         captured["timeout"] = timeout
 
         class Resp:
+            status_code = 200
             def raise_for_status(self):
                 pass
 
