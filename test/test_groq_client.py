@@ -28,7 +28,10 @@ def test_get_suggestions_calls_api(monkeypatch):
     assert resp == {"choices": []}
     assert captured["url"] == GROQ_API_URL
     assert "Authorization" in captured["headers"]
-    assert captured["json"]["messages"][0]["content"].startswith("Review the following")
+    msgs = captured["json"]["messages"]
+    assert msgs[0]["role"] == "system"
+    assert "concise" in msgs[0]["content"].lower()
+    assert msgs[1]["content"].startswith("Review the following")
 
 
 def test_get_suggestions_retries_on_server_error(monkeypatch):

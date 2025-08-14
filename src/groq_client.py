@@ -18,7 +18,12 @@ logger = logging.getLogger(__name__)
 # https://console.groq.com/docs shows that the API mirrors OpenAI's
 # `/chat/completions` route rather than the legacy `/completions` path.
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# Prompt sent with each request
 PROMPT_TEMPLATE = "Review the following text for grammar and style:\n\n{text}"
+# System instruction to keep the model's feedback brief and relevant
+SYSTEM_PROMPT = (
+    "You are an AI reviewer. Provide clear, concise, and useful feedback only."
+)
 # Maximum bytes of text per request. Default derives from a 3MB document
 # split across 30 requests (about 100KB). Can be overridden via
 # ``GROQ_CHUNK_SIZE`` environment variable.
@@ -71,7 +76,10 @@ def get_suggestions(
     def _post(prompt: str) -> Dict[str, Any]:
         payload = {
             "model": "llama-3.1-8b-instant",
-            "messages": [{"role": "user", "content": prompt}],
+            "messages": [
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt},
+            ],
             "temperature": 0.2,
             "max_tokens": 800,
         }
