@@ -19,7 +19,10 @@ logger = logging.getLogger(__name__)
 # `/chat/completions` route rather than the legacy `/completions` path.
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 PROMPT_TEMPLATE = "Review the following text for grammar and style:\n\n{text}"
-CHUNK_SIZE = 8 * 1024  # 8KB, keep requests comfortably under Groq limits
+# Maximum bytes of text per request. Default derives from a 3MB document
+# split across 30 requests (about 100KB). Can be overridden via
+# ``GROQ_CHUNK_SIZE`` environment variable.
+CHUNK_SIZE = settings.GROQ_CHUNK_SIZE
 
 
 class RateLimiter:
