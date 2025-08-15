@@ -110,8 +110,25 @@ def create_comment(
     content: str,
     start_index: int | None = None,
     end_index: int | None = None,
+    quoted_text: str | None = None,
 ) -> Any:
-    """Create a comment on ``file_id`` anchored to the given range."""
+    """Create a comment on ``file_id`` anchored to the given range.
+
+    Parameters
+    ----------
+    service
+        Authenticated Google Drive service instance.
+    file_id
+        ID of the document to comment on.
+    content
+        Text content of the comment.
+    start_index, end_index
+        Optional character offsets to anchor the comment.
+    quoted_text
+        Optional text snippet to attach as ``quotedFileContent`` so the comment
+        highlights the exact text.
+    """
+
     body: Dict[str, Any] = {"content": content}
     if start_index is not None and end_index is not None:
         body["anchor"] = json.dumps(
@@ -123,6 +140,8 @@ def create_comment(
                 }
             }
         )
+    if quoted_text is not None:
+        body["quotedFileContent"] = {"mimeType": "text/plain", "value": quoted_text}
     return (
         service.comments()
         .create(fileId=file_id, body=body, fields="id")

@@ -68,12 +68,18 @@ def test_get_share_message_fetches_description():
 
 def test_create_and_reply_comment():
     service = MagicMock()
-    create_comment(service, "file", "hello", 1, 5)
+    create_comment(service, "file", "hello", 1, 5, "teh")
     expected_anchor = json.dumps(
         {"r": {"segmentId": "", "startIndex": 1, "endIndex": 5}}
     )
     service.comments.return_value.create.assert_called_once_with(
-        fileId="file", body={"content": "hello", "anchor": expected_anchor}, fields="id"
+        fileId="file",
+        body={
+            "content": "hello",
+            "anchor": expected_anchor,
+            "quotedFileContent": {"mimeType": "text/plain", "value": "teh"},
+        },
+        fields="id",
     )
 
     reply_to_comment(service, "file", "c1", "thanks")

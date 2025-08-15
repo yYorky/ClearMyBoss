@@ -191,8 +191,15 @@ def test_post_comments_calls_create(monkeypatch):
     create_calls = []
     reply_calls = []
 
-    def fake_create(service, file_id, content, start_index=None, end_index=None):
-        create_calls.append((file_id, content, start_index, end_index))
+    def fake_create(
+        service,
+        file_id,
+        content,
+        start_index=None,
+        end_index=None,
+        quoted_text=None,
+    ):
+        create_calls.append((file_id, content, start_index, end_index, quoted_text))
         return {"id": "c1"}
 
     def fake_reply(service, file_id, comment_id, content):
@@ -211,7 +218,7 @@ def test_post_comments_calls_create(monkeypatch):
     ]
     post_comments("svc", "doc1", items)
     assert create_calls == [
-        ("doc1", "AI Reviewer: abcd\nFix typo", 1, 3)
+        ("doc1", "AI Reviewer: abcd\nFix typo", 1, 3, "teh")
     ]
     assert reply_calls == []
 
@@ -220,8 +227,15 @@ def test_post_comments_splits_long_comments(monkeypatch):
     create_calls = []
     reply_calls = []
 
-    def fake_create(service, file_id, content, start_index=None, end_index=None):
-        create_calls.append((file_id, content, start_index, end_index))
+    def fake_create(
+        service,
+        file_id,
+        content,
+        start_index=None,
+        end_index=None,
+        quoted_text=None,
+    ):
+        create_calls.append((file_id, content, start_index, end_index, quoted_text))
         return {"id": "c1"}
 
     def fake_reply(service, file_id, comment_id, content):
@@ -245,6 +259,7 @@ def test_post_comments_splits_long_comments(monkeypatch):
     # First chunk is posted as the main comment, remaining as replies
     assert len(create_calls) == 1
     assert len(reply_calls) == 1
+    assert create_calls[0][4] == "snippet"
     # Ensure the created comment respects size limit
     assert len(create_calls[0][1].encode("utf-8")) <= 4096
     assert len(reply_calls[0][2].encode("utf-8")) <= 4096
