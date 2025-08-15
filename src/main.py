@@ -56,6 +56,7 @@ def run_once(drive_service: Any, docs_service: Any, since: datetime) -> datetime
         "Starting document review cycle. Checking for documents changed since: %s", since
     )
 
+    files: list[dict[str, Any]] = []
     try:
         files = list_recent_docs(drive_service, since)
         logger.info("Found %d documents to process", len(files))

@@ -45,6 +45,10 @@ def build_drive_service() -> Any:
 def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]:
     """Return Google Docs modified or shared after ``since_time``.
 
+    The Drive API does not support filtering by ``sharedWithMeTime`` in the
+    query, so we retrieve all documents either modified after the timestamp or
+    currently shared with the account and then filter the results locally.
+
     Parameters
     ----------
     service
@@ -54,10 +58,10 @@ def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]
         ``sharedWithMeTime`` after this timestamp are returned.
     """
 
-    iso_time = since_time.isoformat("T") + "Z"
+    iso_time = since_time.replace(microsecond=0).isoformat("T") + "Z"
     query = (
         "mimeType='application/vnd.google-apps.document' "
-        f"and (modifiedTime > '{iso_time}' or sharedWithMeTime > '{iso_time}')"
+        f"and (modifiedTime > '{iso_time}' or sharedWithMe = true)"
     )
     results = (
         service.files()
@@ -67,7 +71,21 @@ def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]
         )
         .execute()
     )
-    return results.get("files", [])
+    files = results.get("files", [])
+    recent_files: List[Dict[str, Any]] = []
+    for f in files:
+        for key in ("modifiedTime", "sharedWithMeTime"):
+            ts = f.get(key)
+            if not ts:
+                continue
+            try:
+                dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+            except ValueError:
+                continue
+            if dt > since_time:
+                recent_files.append(f)
+                break
+    return recent_files
 
 
 def get_app_properties(service: Any, file_id: str) -> tuple[Dict[str, str], str]:
