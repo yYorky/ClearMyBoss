@@ -4,6 +4,7 @@ from src.review import (
     _hash,
     deduplicate_suggestions,
     detect_changed_ranges,
+    process_changed_ranges,
     post_comments,
     review_document,
 )
@@ -32,6 +33,25 @@ def test_deduplicate_suggestions():
         [{"suggestion": "Fix typo", "quote": "teh"}], existing
     )
     assert again == []
+
+
+def test_process_changed_ranges_chunks_long_range():
+    paragraphs = ["p0", "a" * 600, "b" * 600, "p3"]
+    changed = [(1, 2)]
+    captured: list[str] = []
+
+    def suggest(text: str, _context: str) -> dict:
+        captured.append(text)
+        return {"issue": "", "suggestion": text, "severity": "info"}
+
+    items = process_changed_ranges(paragraphs, changed, suggest)
+    assert len(items) == 2
+    assert captured == ["a" * 600, "b" * 600]
+    start = len("p0")
+    assert items[0]["start_index"] == start
+    assert items[0]["end_index"] == start + 600
+    assert items[1]["start_index"] == start + 600
+    assert items[1]["end_index"] == start + 1200
 
 
 def test_review_document_pipeline():
