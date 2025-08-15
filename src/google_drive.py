@@ -161,15 +161,11 @@ def create_comment(
 
     body: Dict[str, Any] = {"content": content}
     if start_index is not None and end_index is not None:
-        body["anchor"] = json.dumps(
-            {
-                "r": {
-                    "segmentId": "",
-                    "startIndex": start_index,
-                    "endIndex": end_index,
-                }
-            }
-        )
+        # The Drive API expects the anchor payload to use short keys ``s`` and
+        # ``e`` for start and end character offsets within the document's body.
+        # Using ``startIndex``/``endIndex`` causes the Docs UI to fall back to
+        # "Original content deleted" instead of highlighting the intended text.
+        body["anchor"] = json.dumps({"r": {"s": start_index, "e": end_index}})
     if quoted_text is not None:
         body["quotedFileContent"] = {"mimeType": "text/plain", "value": quoted_text}
     return (
