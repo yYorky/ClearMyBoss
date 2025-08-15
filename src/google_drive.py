@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import os
 from typing import List, Dict, Any
 
@@ -113,7 +114,15 @@ def create_comment(
     """Create a comment on ``file_id`` anchored to the given range."""
     body: Dict[str, Any] = {"content": content}
     if start_index is not None and end_index is not None:
-        body["anchor"] = f"{start_index},{end_index}"
+        body["anchor"] = json.dumps(
+            {
+                "r": {
+                    "segmentId": "",
+                    "startIndex": start_index,
+                    "endIndex": end_index,
+                }
+            }
+        )
     return (
         service.comments()
         .create(fileId=file_id, body=body, fields="id")
