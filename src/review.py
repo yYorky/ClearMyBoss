@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, Dict, List, Set, Tuple
 import hashlib
+import logging
 from difflib import SequenceMatcher
 
 from .google_docs import chunk_paragraphs, get_document_paragraphs
@@ -98,6 +99,32 @@ def _hash(suggestion: str, quote: str) -> str:
     return hashlib.sha1(f"{suggestion}|{quote}".encode()).hexdigest()[:8]
 
 
+def _prune_hashes(hashes: List[str], max_bytes: int = 124) -> str:
+    """Join ``hashes`` ensuring result is <= ``max_bytes`` bytes.
+
+    Oldest hashes (at the start of ``hashes``) are dropped first if the
+    combined comma-separated string would exceed ``max_bytes`` bytes. A warning
+    is logged when pruning occurs.
+    """
+
+    joined = ",".join(hashes)
+    if len(joined.encode("utf-8")) <= max_bytes:
+        return joined
+
+    pruned = False
+    while hashes and len(joined.encode("utf-8")) > max_bytes:
+        hashes.pop(0)
+        joined = ",".join(hashes)
+        pruned = True
+
+    if pruned:
+        logging.warning(
+            "Pruned suggestion hashes to fit within %d bytes", max_bytes
+        )
+
+    return joined
+
+
 def deduplicate_suggestions(
     items: List[Dict[str, str]], existing_hashes: Set[str]
 ) -> List[Dict[str, str]]:
@@ -136,12 +163,15 @@ def review_document(
         current_paragraphs, changed, suggest_fn, context=context
     )
 
-    existing_hashes = set()
+    existing_list: List[str] = []
+    existing_set: Set[str] = set()
     if app_properties.get("suggestionHashes"):
-        existing_hashes = set(app_properties["suggestionHashes"].split(","))
-    unique = deduplicate_suggestions(items, existing_hashes)
+        existing_list = app_properties["suggestionHashes"].split(",")
+        existing_set = set(existing_list)
 
-    app_properties["suggestionHashes"] = ",".join(sorted(existing_hashes))
+    unique = deduplicate_suggestions(items, existing_set)
+    existing_list.extend(item["hash"] for item in unique)
+    app_properties["suggestionHashes"] = _prune_hashes(existing_list)
     update_last_reviewed_revision(app_properties, head_revision)
     update_app_properties(drive_service, document_id, app_properties)
 
