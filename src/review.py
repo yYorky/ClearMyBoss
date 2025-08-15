@@ -6,8 +6,8 @@ import logging
 from difflib import SequenceMatcher
 
 from .google_docs import chunk_paragraphs, get_document_paragraphs
+from .google_apps_script import create_comment
 from .google_drive import (
-    create_comment,
     download_revision_text,
     get_app_properties,
     get_share_message,
@@ -196,7 +196,12 @@ def review_document(
     return unique
 
 
-def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, str]]) -> None:
+def post_comments(
+    drive_service: Any,
+    script_service: Any,
+    document_id: str,
+    items: List[Dict[str, str]],
+) -> None:
     """Post review items as comments on the document.
 
     Comments contain only AI-generated feedback and are anchored to the
@@ -229,12 +234,11 @@ def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, st
         parts = _chunk_content(content)
         # Post the first part anchored to the text range
         comment = create_comment(
-            drive_service,
+            script_service,
             document_id,
             parts[0],
             item.get("start_index"),
             item.get("end_index"),
-            item.get("quote"),
         )
         # Post remaining parts as replies
         for part in parts[1:]:

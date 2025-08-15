@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-import json
 import os
 from typing import List, Dict, Any
 
@@ -132,47 +131,6 @@ def get_share_message(service: Any, file_id: str) -> str:
         .execute()
     )
     return result.get("description", "")
-
-
-def create_comment(
-    service: Any,
-    file_id: str,
-    content: str,
-    start_index: int | None = None,
-    end_index: int | None = None,
-    quoted_text: str | None = None,
-) -> Any:
-    """Create a comment on ``file_id`` anchored to the given range.
-
-    Parameters
-    ----------
-    service
-        Authenticated Google Drive service instance.
-    file_id
-        ID of the document to comment on.
-    content
-        Text content of the comment.
-    start_index, end_index
-        Optional character offsets to anchor the comment.
-    quoted_text
-        Optional text snippet to attach as ``quotedFileContent`` so the comment
-        highlights the exact text.
-    """
-
-    body: Dict[str, Any] = {"content": content}
-    if start_index is not None and end_index is not None:
-        # The Drive API expects the anchor payload to use short keys ``s`` and
-        # ``e`` for start and end character offsets within the document's body.
-        # Using ``startIndex``/``endIndex`` causes the Docs UI to fall back to
-        # "Original content deleted" instead of highlighting the intended text.
-        body["anchor"] = json.dumps({"r": {"s": start_index, "e": end_index}})
-    if quoted_text is not None:
-        body["quotedFileContent"] = {"mimeType": "text/plain", "value": quoted_text}
-    return (
-        service.comments()
-        .create(fileId=file_id, body=body, fields="id")
-        .execute()
-    )
 
 
 def reply_to_comment(
