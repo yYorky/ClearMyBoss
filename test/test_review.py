@@ -37,6 +37,19 @@ def test_deduplicate_suggestions():
     assert again == []
 
 
+def test_deduplicate_suggestions_skips_empty():
+    existing = set()
+    items = [
+        {"suggestion": "", "quote": "teh"},
+        {"suggestion": "Fix typo", "quote": "teh"},
+    ]
+    unique = deduplicate_suggestions(items, existing)
+    assert len(unique) == 1
+    assert unique[0]["suggestion"] == "Fix typo"
+    # existing should only contain hash for non-empty suggestion
+    assert len(existing) == 1
+
+
 def test_prune_hashes_limit():
     hashes = [f"{i:08x}" for i in range(30)]
     result = _prune_hashes(hashes)
@@ -121,6 +134,57 @@ def test_review_document_pipeline():
     assert update_body["appProperties"]["lastReviewedRevisionId"] == "2"
     assert expected_hash in update_body["appProperties"]["suggestionHashes"]
     assert "abcd" in update_body["appProperties"]["suggestionHashes"]
+
+
+def test_review_document_ignores_empty_suggestions():
+    drive = MagicMock()
+
+    def files_get(fileId=None, fields=None):
+        if fields == "appProperties, headRevisionId":
+            return MagicMock(
+                execute=MagicMock(
+                    return_value={
+                        "appProperties": {
+                            "lastReviewedRevisionId": "1",
+                            "suggestionHashes": "abcd",
+                        },
+                        "headRevisionId": "2",
+                    }
+                )
+            )
+        if fields == "description":
+            return MagicMock(execute=MagicMock(return_value={"description": "share msg"}))
+        return MagicMock(execute=MagicMock(return_value={}))
+
+    drive.files.return_value.get.side_effect = files_get
+    drive.revisions.return_value.get.return_value.execute.return_value = (
+        "para1\npara2\n"
+    )
+
+    docs = MagicMock()
+    docs.documents.return_value.get.return_value.execute.return_value = {
+        "body": {
+            "content": [
+                {"paragraph": {"elements": [{"textRun": {"content": "para1"}}]}},
+                {
+                    "paragraph": {
+                        "elements": [
+                            {"textRun": {"content": "para2 updated"}}
+                        ]
+                    }
+                },
+            ]
+        }
+    }
+
+    def suggest(_text: str, _context: str):
+        return {"issue": "typo", "suggestion": "", "severity": "major"}
+
+    items = review_document(drive, docs, "doc1", suggest)
+    assert items == []
+    update_body = drive.files.return_value.update.call_args.kwargs["body"]
+    # suggestionHashes should remain unchanged
+    assert update_body["appProperties"]["suggestionHashes"] == "abcd"
 
 
 def test_post_comments_calls_create(monkeypatch):

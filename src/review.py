@@ -137,6 +137,8 @@ def deduplicate_suggestions(
     """Remove suggestions already represented by ``existing_hashes``."""
     unique: List[Dict[str, str]] = []
     for item in items:
+        if not item.get("suggestion"):
+            continue
         h = _hash(item["suggestion"], item["quote"])
         if h in existing_hashes:
             continue
