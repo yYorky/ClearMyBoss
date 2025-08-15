@@ -42,42 +42,73 @@ def groq_suggest(text: str, context: str) -> dict[str, str]:
 
 
 def run_once(drive_service: Any, docs_service: Any, since: datetime) -> datetime:
-    """Process documents modified since ``since`` and return new timestamp."""
-    logger.info(f"Starting document review cycle. Checking for documents modified since: {since}")
-    
+    """Process documents changed since ``since`` and return new timestamp.
+
+    Documents are considered changed if they were modified or newly shared with
+    the service account after the provided ``since`` timestamp.
+    """
+
+    logger.info(
+        "Starting document review cycle. Checking for documents changed since: %s", since
+    )
+
     try:
         files = list_recent_docs(drive_service, since)
-        logger.info(f"Found {len(files)} documents to process")
-        
+        logger.info("Found %d documents to process", len(files))
+
         processed_count = 0
         for f in files:
             doc_id = f["id"]
             doc_name = f.get("name", "Unknown Document")
-            logger.info(f"Processing document: '{doc_name}' (ID: {doc_id})")
-            
+            logger.info("Processing document: '%s' (ID: %s)", doc_name, doc_id)
+
             try:
                 items = review_document(drive_service, docs_service, doc_id, groq_suggest)
-                logger.info(f"Generated {len(items)} review items for document '{doc_name}'")
-                
+                logger.info(
+                    "Generated %d review items for document '%s'", len(items), doc_name
+                )
+
                 if items:
                     post_comments(drive_service, doc_id, items)
-                    logger.info(f"Posted {len(items)} comments to document '{doc_name}'")
+                    logger.info(
+                        "Posted %d comments to document '%s'", len(items), doc_name
+                    )
                 else:
-                    logger.info(f"No comments to post for document '{doc_name}'")
-                    
+                    logger.info("No comments to post for document '%s'", doc_name)
+
                 processed_count += 1
-                
+
             except Exception as e:
-                logger.error(f"Error processing document '{doc_name}' (ID: {doc_id}): {e}")
+                logger.error(
+                    "Error processing document '%s' (ID: %s): %s", doc_name, doc_id, e
+                )
                 continue
-                
-        logger.info(f"Completed review cycle. Successfully processed {processed_count}/{len(files)} documents")
-        
-    except Exception as e:
+
+        logger.info(
+            "Completed review cycle. Successfully processed %d/%d documents",
+            processed_count,
+            len(files),
+        )
+
+    except Exception as e:  # pragma: no cover - logging path
         logger.error(f"Error during document review cycle: {e}")
-    
-    new_timestamp = datetime.utcnow()
-    logger.info(f"Next review cycle will check for documents modified after: {new_timestamp}")
+
+    latest_time = since
+    for f in files:
+        for key in ("modifiedTime", "sharedWithMeTime"):
+            ts = f.get(key)
+            if ts:
+                try:
+                    dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+                except ValueError:
+                    continue
+                if dt > latest_time:
+                    latest_time = dt
+
+    new_timestamp = max(latest_time, datetime.utcnow())
+    logger.info(
+        "Next review cycle will check for documents changed after: %s", new_timestamp
+    )
     return new_timestamp
 
 
