@@ -16,6 +16,12 @@ from .google_drive import (
 )
 
 
+# Maximum allowed bytes for a single app property (key + value).
+MAX_APP_PROPERTY_BYTES = 124
+
+SUGGESTION_HASHES_KEY = "suggestionHashes"
+
+
 def get_last_reviewed_revision(app_properties: Dict[str, str]) -> str | None:
     """Return stored ``lastReviewedRevisionId`` if present."""
     return app_properties.get("lastReviewedRevisionId")
@@ -165,13 +171,17 @@ def review_document(
 
     existing_list: List[str] = []
     existing_set: Set[str] = set()
-    if app_properties.get("suggestionHashes"):
-        existing_list = app_properties["suggestionHashes"].split(",")
+    if app_properties.get(SUGGESTION_HASHES_KEY):
+        existing_list = app_properties[SUGGESTION_HASHES_KEY].split(",")
         existing_set = set(existing_list)
 
     unique = deduplicate_suggestions(items, existing_set)
     existing_list.extend(item["hash"] for item in unique)
-    app_properties["suggestionHashes"] = _prune_hashes(existing_list)
+
+    available_bytes = MAX_APP_PROPERTY_BYTES - len(SUGGESTION_HASHES_KEY)
+    app_properties[SUGGESTION_HASHES_KEY] = _prune_hashes(
+        existing_list, max_bytes=available_bytes
+    )
     update_last_reviewed_revision(app_properties, head_revision)
     update_app_properties(drive_service, document_id, app_properties)
 

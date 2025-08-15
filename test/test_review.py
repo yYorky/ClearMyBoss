@@ -8,6 +8,7 @@ from src.review import (
     process_changed_ranges,
     post_comments,
     review_document,
+    SUGGESTION_HASHES_KEY,
 )
 
 
@@ -183,3 +184,45 @@ def test_post_comments_splits_long_comments(monkeypatch):
     # Ensure the created comment respects size limit
     assert len(create_calls[0][1].encode("utf-8")) <= 4096
     assert len(reply_calls[0][2].encode("utf-8")) <= 4096
+
+
+def test_suggestion_hashes_property_total_size_limit():
+    drive = MagicMock()
+
+    existing_hashes = [f"{i:08x}" for i in range(12)]
+    suggestion_hashes = ",".join(existing_hashes)
+
+    def files_get(fileId=None, fields=None):
+        if fields == "appProperties, headRevisionId":
+            return MagicMock(
+                execute=MagicMock(
+                    return_value={
+                        "appProperties": {"suggestionHashes": suggestion_hashes},
+                        "headRevisionId": "2",
+                    }
+                )
+            )
+        if fields == "description":
+            return MagicMock(execute=MagicMock(return_value={"description": ""}))
+        return MagicMock(execute=MagicMock(return_value={}))
+
+    drive.files.return_value.get.side_effect = files_get
+
+    docs = MagicMock()
+    docs.documents.return_value.get.return_value.execute.return_value = {
+        "body": {
+            "content": [
+                {"paragraph": {"elements": [{"textRun": {"content": "para1"}}]}},
+                {"paragraph": {"elements": [{"textRun": {"content": "para2"}}]}},
+            ]
+        }
+    }
+
+    def suggest(_text: str, _context: str) -> dict:
+        return {"issue": "", "suggestion": "Fix typo", "severity": "info"}
+
+    review_document(drive, docs, "doc1", suggest)
+    update_body = drive.files.return_value.update.call_args.kwargs["body"]
+    value = update_body["appProperties"][SUGGESTION_HASHES_KEY]
+    total = len(SUGGESTION_HASHES_KEY.encode("utf-8")) + len(value.encode("utf-8"))
+    assert total <= 124
