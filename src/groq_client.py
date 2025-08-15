@@ -20,11 +20,15 @@ logger = logging.getLogger(__name__)
 # `/chat/completions` route rather than the legacy `/completions` path.
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Prompt sent with each request
-PROMPT_TEMPLATE = "Review the following text for grammar and style:\n\n{text}"
+PROMPT_TEMPLATE = (
+    "Review the following text for grammar and style. "
+    "Respond in one or two short sentences in plain language.\n\n{text}"
+)
 # System instruction to keep the model's feedback brief and relevant
 SYSTEM_PROMPT = (
     "You are a no-nonsense boss reviewing your employee's work. "
-    "Provide direct, actionable feedback on the text."
+    "Provide direct, actionable feedback in casual, plain language. "
+    "Keep feedback to one or two short sentences."
 )
 # Maximum bytes of text per request. Default tested at 20KB. Can be overridden via
 # ``GROQ_CHUNK_SIZE`` environment variable.
