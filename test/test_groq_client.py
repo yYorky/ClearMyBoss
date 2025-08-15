@@ -141,6 +141,31 @@ def test_get_suggestions_retries_on_429(monkeypatch):
     assert sleeps == [1.0]
 
 
+def test_rate_limiter_enforces_min_spacing(monkeypatch):
+    import src.groq_client as gc
+    from src.groq_client import RateLimiter
+
+    times = [0.0]
+    sleeps: list[float] = []
+
+    def fake_time() -> float:
+        return times[0]
+
+    def fake_sleep(s: float) -> None:
+        sleeps.append(s)
+        times[0] += s
+
+    monkeypatch.setattr(gc.time, "time", fake_time)
+    monkeypatch.setattr(gc.time, "sleep", fake_sleep)
+
+    rl = RateLimiter(60)
+    for _ in range(5):
+        rl.acquire()
+
+    # First acquire happens immediately; subsequent four should wait 1 second each
+    assert sleeps == [1.0, 1.0, 1.0, 1.0]
+
+
 def test_rate_limiter_sliding_window(monkeypatch):
     import src.groq_client as gc
     from src.groq_client import RateLimiter
@@ -205,9 +230,101 @@ def test_rate_limiter_thread_safety(monkeypatch):
     for t in threads:
         t.join()
 
-    early = [t for t in results if t < 60]
-    later = [t for t in results if t >= 60]
+    results.sort()
+    min_interval = 60 / 5
+    intervals = [b - a for a, b in zip(results, results[1:])]
+    assert all(i >= min_interval for i in intervals)
+    # 9 sleeps of min_interval were required for 10 calls
+    assert fake.sleeps == [min_interval] * 9
 
-    assert len(early) == 5
-    assert len(later) == 5
-    assert fake.sleeps == [60]
+
+def test_get_suggestions_halts_on_persistent_429(monkeypatch, caplog):
+    calls = {"count": 0}
+
+    def fake_post(url, json, headers, timeout):
+        calls["count"] += 1
+
+        class Resp:
+            status_code = 429
+            headers = {}
+
+            def raise_for_status(self):
+                from requests import HTTPError
+
+                raise HTTPError(response=self)
+
+            def json(self):
+                return {}
+
+        return Resp()
+
+    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("src.groq_client.rate_limiter.acquire", lambda: None)
+
+    text = "x" * (CHUNK_SIZE * 2)
+    with caplog.at_level("ERROR"):
+        with pytest.raises(Exception):
+            get_suggestions(text, retries=1, halt_on_429=True)
+
+    # Only first chunk attempted
+    assert calls["count"] == 1
+    assert "429" in caplog.text
+
+
+def test_spacing_prevents_429(monkeypatch):
+    import src.groq_client as gc
+
+    times = [0.0]
+    sleeps: list[float] = []
+    call_times: list[float] = []
+    saw_429 = {"flag": False}
+
+    def fake_time() -> float:
+        return times[0]
+
+    def fake_sleep(s: float) -> None:
+        sleeps.append(s)
+        times[0] += s
+
+    def fake_post(url, json, headers, timeout):
+        # If calls arrive more frequently than once per second, simulate 429
+        if call_times and times[0] - call_times[-1] < 1.0:
+            saw_429["flag"] = True
+            class Resp:
+                status_code = 429
+                headers = {"Retry-After": "1"}
+
+                def raise_for_status(self):
+                    from requests import HTTPError
+
+                    raise HTTPError(response=self)
+
+                def json(self):
+                    return {}
+
+            return Resp()
+
+        call_times.append(times[0])
+
+        class Resp:
+            status_code = 200
+
+            def raise_for_status(self):
+                pass
+
+            def json(self):
+                return {"choices": []}
+
+        return Resp()
+
+    monkeypatch.setattr(gc.time, "time", fake_time)
+    monkeypatch.setattr(gc.time, "sleep", fake_sleep)
+    monkeypatch.setattr("requests.post", fake_post)
+    gc.rate_limiter = gc.RateLimiter(60)
+
+    for _ in range(5):
+        get_suggestions("ok")
+
+    intervals = [b - a for a, b in zip(call_times, call_times[1:])]
+    assert all(i >= 1.0 for i in intervals)
+    assert not saw_429["flag"]
