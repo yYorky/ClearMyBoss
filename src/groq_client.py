@@ -1,4 +1,4 @@
-"""Simple Groq API client for grammar suggestions."""
+"""Simple Groq API client for text review suggestions."""
 from __future__ import annotations
 
 from typing import Any, Dict, Iterable
@@ -21,14 +21,15 @@ logger = logging.getLogger(__name__)
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Prompt sent with each request
 PROMPT_TEMPLATE = (
-    "Review the following text for grammar and style. "
+    "Review the following text and provide suggestions for improvement. "
+    "Feel free to ask clarifying questions or offer broader comments beyond grammar. "
     "Respond in one or two short sentences in plain language.\n\n{text}"
 )
 # System instruction to keep the model's feedback brief and relevant
 SYSTEM_PROMPT = (
     "You are a no-nonsense boss reviewing your employee's work. "
-    "Provide direct, actionable feedback in casual, plain language. "
-    "Keep feedback to one or two short sentences."
+    "Provide direct, actionable feedback or clarifying questions in casual, plain language. "
+    "You may comment on broader issues beyond grammar. Keep feedback to one or two short sentences."
 )
 # Maximum bytes of text per request. Default tested at 20KB. Can be overridden via
 # ``GROQ_CHUNK_SIZE`` environment variable.

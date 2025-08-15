@@ -31,7 +31,9 @@ def test_get_suggestions_calls_api(monkeypatch):
     msgs = captured["json"]["messages"]
     assert msgs[0]["role"] == "system"
     assert "boss" in msgs[0]["content"].lower()
-    assert msgs[1]["content"].startswith("Review the following")
+    assert "clarifying" in msgs[0]["content"].lower() or "broader" in msgs[0]["content"].lower()
+    assert msgs[1]["content"].lower().startswith("review the following text")
+    assert "clarifying questions" in msgs[1]["content"].lower()
 
 
 def test_get_suggestions_retries_on_server_error(monkeypatch):
