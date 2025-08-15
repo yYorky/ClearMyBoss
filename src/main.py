@@ -23,7 +23,11 @@ logger = logging.getLogger(__name__)
 
 
 def groq_suggest(text: str, context: str) -> dict[str, str]:
-    """Wrapper around :func:`get_suggestions` producing review item dicts."""
+    """Wrapper around :func:`get_suggestions` producing review item dicts.
+
+    The underlying model may return clarifying questions or broader comments in
+    addition to grammar and style feedback.
+    """
     logger.debug(f"Getting suggestions for text length: {len(text)}, context length: {len(context) if context else 0}")
     prompt = f"{context}\n\n{text}" if context else text
     try:
