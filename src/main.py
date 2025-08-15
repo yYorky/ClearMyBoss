@@ -10,6 +10,7 @@ from .google_drive import build_drive_service, list_recent_docs
 from .google_docs import build_docs_service
 from .google_apps_script import build_script_service
 from .groq_client import get_suggestions
+from requests import HTTPError
 from .review import review_document, post_comments
 
 # Configure logging
@@ -32,7 +33,7 @@ def groq_suggest(text: str, context: str) -> dict[str, str]:
     logger.debug(f"Getting suggestions for text length: {len(text)}, context length: {len(context) if context else 0}")
     prompt = f"{context}\n\n{text}" if context else text
     try:
-        resp = get_suggestions(prompt)
+        resp = get_suggestions(prompt, retries=5, backoff=2, halt_on_429=False)
         suggestion = ""
         if resp.get("choices"):
             choice = resp["choices"][0]
@@ -41,6 +42,13 @@ def groq_suggest(text: str, context: str) -> dict[str, str]:
         else:
             logger.warning("No choices returned from Groq API")
         return {"issue": "", "suggestion": suggestion.strip(), "severity": "info"}
+    except HTTPError as e:
+        status = e.response.status_code if e.response else None
+        if status == 429:
+            logger.warning("Rate limited by Groq: %s", e)
+        else:
+            logger.error("Error getting suggestions from Groq: %s", e)
+        return {"issue": "", "suggestion": "", "severity": "info"}
     except Exception as e:
         logger.error(f"Error getting suggestions from Groq: {e}")
         return {"issue": "", "suggestion": "", "severity": "info"}

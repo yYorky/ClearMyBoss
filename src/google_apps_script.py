@@ -47,16 +47,15 @@ def create_comment(
     -------
     Dict containing the ``id`` of the created comment.
     """
+    script_id = settings.GOOGLE_APPS_SCRIPT_ID
+    if not script_id:
+        raise ValueError("GOOGLE_APPS_SCRIPT_ID is not set")
 
     body: Dict[str, Any] = {
         "function": "addComment",
         "parameters": [document_id, start_index, end_index, content],
     }
-    response = (
-        service.scripts()
-        .run(scriptId=settings.GOOGLE_APPS_SCRIPT_ID, body=body)
-        .execute()
-    )
+    response = service.scripts().run(scriptId=script_id, body=body).execute()
     result = response.get("response", {}).get("result", {})
     if isinstance(result, dict):
         comment_id = result.get("id", "")
