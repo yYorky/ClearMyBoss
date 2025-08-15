@@ -75,7 +75,9 @@ def process_changed_ranges(
     # derive ``start_index``/``end_index`` for changed ranges.
     offsets: List[int] = [0]
     for para in paragraphs:
-        offsets.append(offsets[-1] + len(para))
+        # Account for the trailing newline that separates paragraphs in the
+        # document's plain-text representation.
+        offsets.append(offsets[-1] + len(para) + 1)
 
     items: List[Dict[str, str]] = []
     for start, end in changed_ranges:
@@ -83,7 +85,7 @@ def process_changed_ranges(
         para_slice = paragraphs[start : end + 1]
         chunks = chunk_paragraphs(para_slice, chunk_chars)
         relative = 0
-        for chunk in chunks:
+        for i, chunk in enumerate(chunks):
             response = suggest_fn(chunk, context)
             chunk_start = start_offset + relative
             chunk_end = chunk_start + len(chunk)
@@ -98,6 +100,10 @@ def process_changed_ranges(
                 }
             )
             relative += len(chunk)
+            # ``chunks`` are joined with newlines in the document; account for
+            # the separator except after the last chunk.
+            if i < len(chunks) - 1:
+                relative += 1
     return items
 
 

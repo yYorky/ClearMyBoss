@@ -68,11 +68,11 @@ def test_process_changed_ranges_chunks_long_range():
     items = process_changed_ranges(paragraphs, changed, suggest)
     assert len(items) == 2
     assert captured == ["a" * 600, "b" * 600]
-    start = len("p0")
+    start = len("p0") + 1
     assert items[0]["start_index"] == start
     assert items[0]["end_index"] == start + 600
-    assert items[1]["start_index"] == start + 600
-    assert items[1]["end_index"] == start + 1200
+    assert items[1]["start_index"] == start + 601
+    assert items[1]["end_index"] == start + 1201
 
 
 def test_review_document_pipeline():
@@ -126,8 +126,8 @@ def test_review_document_pipeline():
     assert len(items) == 1
     assert items[0]["suggestion"] == "Fix typo"
     assert captured["context"] == "share msg"
-    assert items[0]["start_index"] == len("para1")
-    assert items[0]["end_index"] == len("para1") + len("para2 updated")
+    assert items[0]["start_index"] == len("para1") + 1
+    assert items[0]["end_index"] == len("para1") + 1 + len("para2 updated")
 
     expected_hash = _hash("Fix typo", "para2 updated")
     update_body = drive.files.return_value.update.call_args.kwargs["body"]

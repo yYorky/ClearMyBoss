@@ -20,4 +20,4 @@ def test_get_document_paragraphs():
 def test_chunk_paragraphs():
     paragraphs = ["a" * 10, "b" * 10, "c" * 10]
     chunks = chunk_paragraphs(paragraphs, max_chars=25)
-    assert chunks == ["a" * 10 + "b" * 10, "c" * 10]
+    assert chunks == ["a" * 10 + "\n" + "b" * 10, "c" * 10]
