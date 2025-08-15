@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 from src.review import (
     _hash,
+    _prune_hashes,
     deduplicate_suggestions,
     detect_changed_ranges,
     process_changed_ranges,
@@ -33,6 +34,12 @@ def test_deduplicate_suggestions():
         [{"suggestion": "Fix typo", "quote": "teh"}], existing
     )
     assert again == []
+
+
+def test_prune_hashes_limit():
+    hashes = [f"{i:08x}" for i in range(30)]
+    result = _prune_hashes(hashes)
+    assert len(result.encode("utf-8")) <= 124
 
 
 def test_process_changed_ranges_chunks_long_range():
