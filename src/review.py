@@ -220,7 +220,7 @@ def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, st
         return chunks
 
     for item in items:
-        lines = [f"AI Reviewer: {item['hash']}"]
+        lines: List[str] = []
         issue = item.get("issue")
         if issue:
             lines.append(issue)
