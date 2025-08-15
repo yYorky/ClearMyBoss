@@ -1,11 +1,9 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
-import json
 import pytest
 
 from src.google_drive import (
     download_revision_text,
-    create_comment,
     get_share_message,
     get_app_properties,
     list_recent_docs,
@@ -129,20 +127,8 @@ def test_get_share_message_fetches_description():
     )
 
 
-def test_create_and_reply_comment():
+def test_reply_to_comment():
     service = MagicMock()
-    create_comment(service, "file", "hello", 1, 5, "teh")
-    expected_anchor = json.dumps({"r": {"s": 1, "e": 5}})
-    service.comments.return_value.create.assert_called_once_with(
-        fileId="file",
-        body={
-            "content": "hello",
-            "anchor": expected_anchor,
-            "quotedFileContent": {"mimeType": "text/plain", "value": "teh"},
-        },
-        fields="id",
-    )
-
     reply_to_comment(service, "file", "c1", "thanks")
     service.replies.return_value.create.assert_called_once_with(
         fileId="file", commentId="c1", body={"content": "thanks"}, fields="id"

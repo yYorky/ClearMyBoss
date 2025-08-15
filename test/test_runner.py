@@ -7,6 +7,7 @@ from src.main import run_once
 def test_run_once_reviews_and_posts(monkeypatch):
     drive = MagicMock()
     docs = MagicMock()
+    script = MagicMock()
 
     monkeypatch.setattr(
         "src.main.list_recent_docs", lambda svc, since: [{"id": "1"}, {"id": "2"}]
@@ -24,13 +25,14 @@ def test_run_once_reviews_and_posts(monkeypatch):
 
     posted = []
 
-    def fake_post(drive_service, doc_id, items):
+    def fake_post(drive_service, script_service, doc_id, items):
+        assert script_service is script
         posted.append((doc_id, items))
 
     monkeypatch.setattr("src.main.post_comments", fake_post)
 
     since = datetime.utcnow()
-    new_since = run_once(drive, docs, since)
+    new_since = run_once(drive, docs, script, since)
 
     assert posted == [(
         "1",
