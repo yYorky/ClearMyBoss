@@ -22,7 +22,8 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 PROMPT_TEMPLATE = "Review the following text for grammar and style:\n\n{text}"
 # System instruction to keep the model's feedback brief and relevant
 SYSTEM_PROMPT = (
-    "You are an AI reviewer. Provide clear, concise, and useful feedback only."
+    "You are a no-nonsense boss reviewing your employee's work. "
+    "Provide direct, actionable feedback on the text."
 )
 # Maximum bytes of text per request. Default tested at 20KB. Can be overridden via
 # ``GROQ_CHUNK_SIZE`` environment variable.
