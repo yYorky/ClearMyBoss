@@ -138,11 +138,11 @@ def review_document(
 def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, str]]) -> None:
     """Post review items as comments on the document.
 
-    Each comment includes the quoted text snippet it refers to. If a comment
-    exceeds the 4096 byte limit imposed by the Google Drive API, the comment
-    is split into multiple parts. The first part is posted as a comment
-    anchored to the relevant text range; subsequent parts are added as
-    replies to the first comment.
+    Comments contain only AI-generated feedback and are anchored to the
+    relevant text range. If a comment exceeds the 4096 byte limit imposed by
+    the Google Drive API, it is split into multiple parts. The first part is
+    posted as a comment anchored to the text range; subsequent parts are added
+    as replies to the first comment.
     """
 
     MAX_BYTES = 4096
@@ -159,8 +159,12 @@ def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, st
         return chunks
 
     for item in items:
-        quote = item.get("quote", "")
-        content = f"AI Reviewer: {item['hash']}\n\"{quote}\"\n{item['suggestion']}"
+        lines = [f"AI Reviewer: {item['hash']}"]
+        issue = item.get("issue")
+        if issue:
+            lines.append(issue)
+        lines.append(item.get("suggestion", ""))
+        content = "\n".join(lines)
         parts = _chunk_content(content)
         # Post the first part anchored to the text range
         comment = create_comment(

@@ -119,7 +119,7 @@ def test_post_comments_calls_create(monkeypatch):
     ]
     post_comments("svc", "doc1", items)
     assert create_calls == [
-        ("doc1", 'AI Reviewer: abcd\n"teh"\nFix typo', 1, 3)
+        ("doc1", "AI Reviewer: abcd\nFix typo", 1, 3)
     ]
     assert reply_calls == []
 
