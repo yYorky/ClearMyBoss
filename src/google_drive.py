@@ -82,7 +82,9 @@ def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]
             if not ts:
                 continue
             try:
-                dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+                dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(
+                    tzinfo=None
+                )
             except ValueError:
                 continue
             if dt > since_time:

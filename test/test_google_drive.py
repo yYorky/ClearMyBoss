@@ -72,6 +72,28 @@ def test_list_recent_docs_includes_newly_shared_docs():
     assert files[0]["name"] == "Shared"
 
 
+def test_list_recent_docs_parses_microsecond_timestamps():
+    """Timestamps with fractional seconds should be parsed correctly."""
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "1",
+                "name": "Micro",
+                "modifiedTime": "2024-01-02T00:00:00.123456Z",
+            },
+            {
+                "id": "2",
+                "name": "SharedMicro",
+                "sharedWithMeTime": "2024-01-02T00:00:00.654321Z",
+            },
+        ]
+    }
+    since = datetime(2024, 1, 1, 23, 59, 59)
+    files = list_recent_docs(service, since)
+    assert {f["name"] for f in files} == {"Micro", "SharedMicro"}
+
+
 def test_app_properties_roundtrip():
     service = MagicMock()
     service.files.return_value.get.return_value.execute.return_value = {
