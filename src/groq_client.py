@@ -7,6 +7,7 @@ import logging
 import time
 import threading
 import random
+from collections import deque
 import requests
 from requests.exceptions import HTTPError, RequestException
 
@@ -31,25 +32,33 @@ CHUNK_SIZE = settings.GROQ_CHUNK_SIZE
 
 
 class RateLimiter:
-    """Simple token bucket style rate limiter.
+    """Sliding-window rate limiter.
 
-    Ensures no more than ``requests_per_minute`` calls are made in any 60
-    second window by sleeping as needed before allowing each request to
-    proceed. Thread-safe so multiple threads can share the limiter.
+    Tracks timestamps of the most recent ``requests_per_minute`` calls and
+    ensures that no more than that number occur in any rolling 60 second
+    window. If the limit would be exceeded, ``acquire`` blocks until enough
+    time has passed for the oldest call to expire from the window. Thread-safe
+    so multiple threads can share the limiter.
     """
 
     def __init__(self, requests_per_minute: int) -> None:
-        self.interval = 60.0 / max(1, requests_per_minute)
+        self.max_calls = max(1, requests_per_minute)
         self.lock = threading.Lock()
-        self.last_time = 0.0
+        self.calls: deque[float] = deque()
 
     def acquire(self) -> None:
-        with self.lock:
-            now = time.time()
-            wait = self.last_time + self.interval - now
+        while True:
+            with self.lock:
+                now = time.time()
+                # Remove timestamps outside the 60 second window
+                while self.calls and now - self.calls[0] >= 60:
+                    self.calls.popleft()
+                if len(self.calls) < self.max_calls:
+                    self.calls.append(now)
+                    return
+                wait = self.calls[0] + 60 - now
             if wait > 0:
                 time.sleep(wait)
-            self.last_time = time.time()
 
 
 rate_limiter = RateLimiter(settings.GROQ_REQUESTS_PER_MINUTE)
