@@ -38,18 +38,27 @@ def get_document_paragraphs(service: Any, document_id: str) -> List[str]:
 
 
 def chunk_paragraphs(paragraphs: List[str], max_chars: int) -> List[str]:
-    """Chunk paragraphs into groups limited by ``max_chars`` characters."""
+    """Chunk paragraphs into groups limited by ``max_chars`` characters.
+
+    Paragraphs are concatenated using newline characters so that the returned
+    chunks mirror the exact text found in the document. ``max_chars`` therefore
+    includes these newline separators when computing the size of each chunk.
+    """
+
     chunks: List[str] = []
     current: List[str] = []
     current_len = 0
     for para in paragraphs:
-        if current_len + len(para) > max_chars and current:
-            chunks.append("".join(current))
+        # ``para_len`` accounts for a preceding newline when ``current`` already
+        # contains content so that the length matches the document text.
+        para_len = len(para) + (1 if current else 0)
+        if current_len + para_len > max_chars and current:
+            chunks.append("\n".join(current))
             current = [para]
             current_len = len(para)
         else:
             current.append(para)
-            current_len += len(para)
+            current_len += para_len
     if current:
-        chunks.append("".join(current))
+        chunks.append("\n".join(current))
     return chunks
