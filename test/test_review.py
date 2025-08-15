@@ -109,10 +109,18 @@ def test_post_comments_calls_create(monkeypatch):
     monkeypatch.setattr("src.review.create_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
     items = [
-        {"suggestion": "Fix typo", "hash": "abcd", "start_index": 1, "end_index": 3}
+        {
+            "suggestion": "Fix typo",
+            "hash": "abcd",
+            "quote": "teh",
+            "start_index": 1,
+            "end_index": 3,
+        }
     ]
     post_comments("svc", "doc1", items)
-    assert create_calls == [("doc1", "AI Reviewer: abcd\nFix typo", 1, 3)]
+    assert create_calls == [
+        ("doc1", 'AI Reviewer: abcd\n"teh"\nFix typo', 1, 3)
+    ]
     assert reply_calls == []
 
 
@@ -132,7 +140,13 @@ def test_post_comments_splits_long_comments(monkeypatch):
 
     long_text = "a" * 5000
     items = [
-        {"suggestion": long_text, "hash": "h", "start_index": 0, "end_index": 1}
+        {
+            "suggestion": long_text,
+            "hash": "h",
+            "quote": "snippet",
+            "start_index": 0,
+            "end_index": 1,
+        }
     ]
     post_comments("svc", "doc1", items)
 

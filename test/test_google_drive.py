@@ -11,6 +11,9 @@ from src.google_drive import (
     reply_to_comment,
     update_app_properties,
     build_drive_service,
+    list_comments,
+    list_replies,
+    filter_user_comments,
 )
 
 
@@ -73,6 +76,47 @@ def test_create_and_reply_comment():
     service.replies.return_value.create.assert_called_once_with(
         fileId="file", commentId="c1", body={"content": "thanks"}, fields="id"
     )
+
+
+def test_list_comments_and_replies():
+    service = MagicMock()
+    service.comments.return_value.list.return_value.execute.return_value = {
+        "comments": [{"id": "c1"}]
+    }
+    comments = list_comments(service, "file")
+    assert comments == [{"id": "c1"}]
+    service.comments.return_value.list.assert_called_once_with(
+        fileId="file", fields="comments(id,author(displayName),content)"
+    )
+
+    service.replies.return_value.list.return_value.execute.return_value = {
+        "replies": [{"id": "r1"}]
+    }
+    replies = list_replies(service, "file", "c1")
+    assert replies == [{"id": "r1"}]
+    service.replies.return_value.list.assert_called_once_with(
+        fileId="file",
+        commentId="c1",
+        fields="replies(id,author(displayName),content)",
+    )
+
+
+def test_filter_user_comments_skips_ai_threads():
+    service = MagicMock()
+    service.comments.return_value.list.return_value.execute.return_value = {
+        "comments": [
+            {"id": "c1", "author": {"displayName": "User1"}},
+            {"id": "c2", "author": {"displayName": "BossBot"}},
+            {"id": "c3", "author": {"displayName": "User2"}},
+        ]
+    }
+    service.replies.return_value.list.return_value.execute.side_effect = [
+        {"replies": [{"author": {"displayName": "BossBot"}}]},
+        {"replies": []},
+        {"replies": [{"author": {"displayName": "User2"}}]},
+    ]
+    threads = filter_user_comments(service, "file", "BossBot")
+    assert [c["id"] for c in threads] == ["c3"]
 
 
 def test_build_drive_service_missing_credentials(monkeypatch):

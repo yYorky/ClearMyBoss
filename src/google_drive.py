@@ -131,3 +131,45 @@ def reply_to_comment(
         .create(fileId=file_id, commentId=comment_id, body=body, fields="id")
         .execute()
     )
+
+
+def list_comments(service: Any, file_id: str) -> List[Dict[str, Any]]:
+    """Return top-level comments for ``file_id``."""
+    result = (
+        service.comments()
+        .list(fileId=file_id, fields="comments(id,author(displayName),content)")
+        .execute()
+    )
+    return result.get("comments", [])
+
+
+def list_replies(service: Any, file_id: str, comment_id: str) -> List[Dict[str, Any]]:
+    """Return replies for a given comment."""
+    result = (
+        service.replies()
+        .list(
+            fileId=file_id,
+            commentId=comment_id,
+            fields="replies(id,author(displayName),content)",
+        )
+        .execute()
+    )
+    return result.get("replies", [])
+
+
+def filter_user_comments(
+    service: Any, file_id: str, ai_display_name: str
+) -> List[Dict[str, Any]]:
+    """Return comment threads whose latest author is not the AI reviewer."""
+    comments = list_comments(service, file_id)
+    user_threads: List[Dict[str, Any]] = []
+    for comment in comments:
+        replies = list_replies(service, file_id, comment["id"])
+        last_author = (
+            replies[-1].get("author", {}).get("displayName", "")
+            if replies
+            else comment.get("author", {}).get("displayName", "")
+        )
+        if last_author != ai_display_name:
+            user_threads.append(comment)
+    return user_threads
