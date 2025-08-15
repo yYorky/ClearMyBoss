@@ -22,6 +22,7 @@ GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Prompt sent with each request
 PROMPT_TEMPLATE = (
     "Review the following text and provide suggestions for improvement. "
+    "Refer to the snippet as 'this part.' "
     "Feel free to ask clarifying questions or offer broader comments beyond grammar. "
     "Respond in one or two short sentences in plain language.\n\n{text}"
 )
@@ -29,6 +30,7 @@ PROMPT_TEMPLATE = (
 SYSTEM_PROMPT = (
     "You are a no-nonsense boss reviewing your employee's work. "
     "Provide direct, actionable feedback or clarifying questions in casual, plain language. "
+    "Refer to the snippet as 'this part.' "
     "You may comment on broader issues beyond grammar. Keep feedback to one or two short sentences."
 )
 # Maximum bytes of text per request. Default tested at 20KB. Can be overridden via
