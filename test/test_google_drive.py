@@ -31,6 +31,33 @@ def test_list_recent_docs_filters_by_time():
     assert files[0]["name"] == "Doc1"
 
 
+def test_list_recent_docs_includes_newly_shared_docs():
+    """Documents shared but not modified should still be returned."""
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "1",
+                "name": "Shared",
+                "modifiedTime": "2024-01-01T00:00:00Z",
+                "sharedWithMeTime": "2024-01-02T00:00:00Z",
+            }
+        ]
+    }
+    since = datetime(2024, 1, 1, 12, 0, 0)
+    files = list_recent_docs(service, since)
+    iso_time = since.isoformat("T") + "Z"
+    expected_query = (
+        "mimeType='application/vnd.google-apps.document' "
+        f"and (modifiedTime > '{iso_time}' or sharedWithMeTime > '{iso_time}')"
+    )
+    service.files.return_value.list.assert_called_once_with(
+        q=expected_query,
+        fields="files(id, name, modifiedTime, sharedWithMeTime)",
+    )
+    assert files[0]["name"] == "Shared"
+
+
 def test_app_properties_roundtrip():
     service = MagicMock()
     service.files.return_value.get.return_value.execute.return_value = {

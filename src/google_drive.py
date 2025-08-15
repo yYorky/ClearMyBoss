@@ -43,21 +43,28 @@ def build_drive_service() -> Any:
 
 
 def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]:
-    """Return a list of Google Docs modified after ``since_time``.
+    """Return Google Docs modified or shared after ``since_time``.
 
     Parameters
     ----------
-    service: Authenticated Google Drive service instance.
-    since_time: datetime object representing last run time.
+    service
+        Authenticated Google Drive service instance.
+    since_time
+        ``datetime`` of the last run. Documents with ``modifiedTime`` or
+        ``sharedWithMeTime`` after this timestamp are returned.
     """
+
     iso_time = since_time.isoformat("T") + "Z"
     query = (
         "mimeType='application/vnd.google-apps.document' "
-        f"and modifiedTime > '{iso_time}'"
+        f"and (modifiedTime > '{iso_time}' or sharedWithMeTime > '{iso_time}')"
     )
     results = (
         service.files()
-        .list(q=query, fields="files(id, name, modifiedTime)")
+        .list(
+            q=query,
+            fields="files(id, name, modifiedTime, sharedWithMeTime)",
+        )
         .execute()
     )
     return results.get("files", [])
