@@ -2,6 +2,7 @@ from unittest.mock import MagicMock
 
 from src.google_apps_script import create_comment
 from config import settings
+import pytest
 
 
 def test_create_comment_invokes_script(monkeypatch):
@@ -19,4 +20,11 @@ def test_create_comment_invokes_script(monkeypatch):
         scriptId="script123",
         body={"function": "addComment", "parameters": ["doc1", 1, 5, "hello"]},
     )
+
+
+def test_create_comment_requires_script_id(monkeypatch):
+    service = MagicMock()
+    monkeypatch.setattr(settings, "GOOGLE_APPS_SCRIPT_ID", None)
+    with pytest.raises(ValueError):
+        create_comment(service, "doc1", "hi")
 

@@ -78,7 +78,7 @@ def test_get_suggestions_raises_after_retries(monkeypatch):
 
 
 def test_groq_suggest_extracts_message_content(monkeypatch):
-    def fake_get_suggestions(prompt):
+    def fake_get_suggestions(prompt, **kwargs):
         return {"choices": [{"message": {"content": "Suggestion here"}}]}
 
     monkeypatch.setattr("src.main.get_suggestions", fake_get_suggestions)
