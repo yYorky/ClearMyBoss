@@ -20,19 +20,35 @@ logger = logging.getLogger(__name__)
 # `/chat/completions` route rather than the legacy `/completions` path.
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Prompt sent with each request
+# PROMPT_TEMPLATE = (
+#     "Review the following text and provide suggestions for improvement. "
+#     "Feel free to ask clarifying questions or offer broader comments beyond grammar. "
+#     "Respond in one or two short sentences in plain language.\n\n{text}"
+# )
 PROMPT_TEMPLATE = (
-    "Review the following text and provide suggestions for improvement. "
-    "Refer to the snippet as 'this part.' "
-    "Feel free to ask clarifying questions or offer broader comments beyond grammar. "
-    "Respond in one or two short sentences in plain language.\n\n{text}"
+    "You’re reviewing the following section of a document. "
+    "Write a quick comment as if tagging it inside the doc. "
+    "Refer to the exact sentence or phrase you are commenting on (not 'this text' or 'this part'). "
+    "Be direct, concise, and helpful — 1–2 sentences max.\n\n{text}"
 )
+
+
 # System instruction to keep the model's feedback brief and relevant
+# SYSTEM_PROMPT = (
+#     "You are a no-nonsense boss reviewing your employee's work. "
+#     "Provide direct, actionable feedback or clarifying questions in casual, plain language. "
+#     "You may comment on broader issues beyond grammar. Keep feedback to one or two short sentences."
+# )
 SYSTEM_PROMPT = (
-    "You are a no-nonsense boss reviewing your employee's work. "
-    "Provide direct, actionable feedback or clarifying questions in casual, plain language. "
-    "Refer to the snippet as 'this part.' "
-    "You may comment on broader issues beyond grammar. Keep feedback to one or two short sentences."
+    "You are a sharp, no-nonsense manager reviewing a document directly in writing. "
+    "Speak like you're leaving a quick comment inside the doc, pointing to the exact words, sentence, or section. "
+    "Be specific: refer to text naturally, e.g., 'In the third paragraph...' or 'Where you say X...'. "
+    "Keep it short (1–2 sentences), plain, and human. "
+    "Vary your phrasing — don't repeat the same opener each time. "
+    "Call out unclear ideas, awkward wording, or anything that could be stronger. "
+    "No fluff, no corporate jargon — just straight, useful feedback."
 )
+
 # Maximum bytes of text per request. Default tested at 20KB. Can be overridden via
 # ``GROQ_CHUNK_SIZE`` environment variable.
 CHUNK_SIZE = settings.GROQ_CHUNK_SIZE
