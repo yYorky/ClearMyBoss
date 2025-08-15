@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, List, Set, Tuple
 import hashlib
 from difflib import SequenceMatcher
 
-from .google_docs import get_document_paragraphs
+from .google_docs import chunk_paragraphs, get_document_paragraphs
 from .google_drive import (
     create_comment,
     download_revision_text,
@@ -56,8 +56,14 @@ def process_changed_ranges(
     changed_ranges: List[Tuple[int, int]],
     suggest_fn: Callable[[str, str], Dict[str, Any]],
     context: str = "",
+    chunk_chars: int = 800,
 ) -> List[Dict[str, str]]:
-    """Run ``suggest_fn`` on changed text ranges and format results."""
+    """Run ``suggest_fn`` on changed text ranges and format results.
+
+    Each changed range is further divided into chunks using
+    :func:`src.google_docs.chunk_paragraphs` so that large edits produce
+    multiple concise comments.
+    """
     # Pre-compute cumulative character offsets for each paragraph so we can
     # derive ``start_index``/``end_index`` for changed ranges.
     offsets: List[int] = [0]
@@ -66,18 +72,25 @@ def process_changed_ranges(
 
     items: List[Dict[str, str]] = []
     for start, end in changed_ranges:
-        text = "".join(paragraphs[start : end + 1])
-        response = suggest_fn(text, context)
-        items.append(
-            {
-                "issue": response.get("issue", ""),
-                "suggestion": response.get("suggestion", ""),
-                "severity": response.get("severity", "info"),
-                "quote": text,
-                "start_index": offsets[start],
-                "end_index": offsets[end + 1],
-            }
-        )
+        start_offset = offsets[start]
+        para_slice = paragraphs[start : end + 1]
+        chunks = chunk_paragraphs(para_slice, chunk_chars)
+        relative = 0
+        for chunk in chunks:
+            response = suggest_fn(chunk, context)
+            chunk_start = start_offset + relative
+            chunk_end = chunk_start + len(chunk)
+            items.append(
+                {
+                    "issue": response.get("issue", ""),
+                    "suggestion": response.get("suggestion", ""),
+                    "severity": response.get("severity", "info"),
+                    "quote": chunk,
+                    "start_index": chunk_start,
+                    "end_index": chunk_end,
+                }
+            )
+            relative += len(chunk)
     return items
 
 
