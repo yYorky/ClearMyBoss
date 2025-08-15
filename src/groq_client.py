@@ -47,16 +47,34 @@ class RateLimiter:
         self.calls: deque[float] = deque()
 
     def acquire(self) -> None:
+        """Block until another call is allowed.
+
+        In addition to enforcing the sliding window, ensure that each call is
+        spaced at least ``60 / max_calls`` seconds from the previous one. This
+        smooths out bursts so that the upstream service isn't hit with many
+        back-to-back requests that could trigger rate limits.
+        """
+
+        min_interval = 60 / self.max_calls
         while True:
             with self.lock:
                 now = time.time()
                 # Remove timestamps outside the 60 second window
                 while self.calls and now - self.calls[0] >= 60:
                     self.calls.popleft()
-                if len(self.calls) < self.max_calls:
+
+                if len(self.calls) < self.max_calls and (
+                    not self.calls or now - self.calls[-1] >= min_interval
+                ):
                     self.calls.append(now)
                     return
-                wait = self.calls[0] + 60 - now
+
+                wait_window = self.calls[0] + 60 - now if self.calls else 0
+                wait_spacing = (
+                    self.calls[-1] + min_interval - now if self.calls else 0
+                )
+                wait = max(wait_window, wait_spacing)
+
             if wait > 0:
                 time.sleep(wait)
 
@@ -69,6 +87,7 @@ def get_suggestions(
     *,
     retries: int = 3,
     backoff: float = 1.0,
+    halt_on_429: bool = True,
 ) -> Dict[str, Any]:
     """Fetch grammar suggestions from Groq.
 
@@ -174,7 +193,16 @@ def get_suggestions(
     responses = []
     for part in _chunks(text, CHUNK_SIZE):
         prompt = prompt_template.format(text=part)
-        responses.append(_post(prompt))
+        try:
+            responses.append(_post(prompt))
+        except HTTPError as exc:
+            status = exc.response.status_code if exc.response else None
+            if status == 429 and halt_on_429:
+                logger.error(
+                    "Persistent 429 from Groq. Halting further requests for this document."
+                )
+                raise
+            raise
 
     combined = "".join(
         choice["message"]["content"]
