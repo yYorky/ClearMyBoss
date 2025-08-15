@@ -27,7 +27,18 @@ def test_list_recent_docs_filters_by_time():
     }
     since = datetime(2023, 12, 31, 23, 0, 0)
     files = list_recent_docs(service, since)
-    service.files.assert_called_once()
+    iso_time = since.replace(microsecond=0).isoformat("T") + "Z"
+    expected_query = (
+        "mimeType='application/vnd.google-apps.document' "
+        f"and (modifiedTime > '{iso_time}' or sharedWithMe = true)"
+    )
+    service.files.return_value.list.assert_called_once_with(
+        q=expected_query,
+        fields="files(id, name, modifiedTime, sharedWithMeTime)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+        corpora="allDrives",
+    )
     assert files[0]["name"] == "Doc1"
 
 
@@ -54,8 +65,33 @@ def test_list_recent_docs_includes_newly_shared_docs():
     service.files.return_value.list.assert_called_once_with(
         q=expected_query,
         fields="files(id, name, modifiedTime, sharedWithMeTime)",
+        supportsAllDrives=True,
+        includeItemsFromAllDrives=True,
+        corpora="allDrives",
     )
     assert files[0]["name"] == "Shared"
+
+
+def test_list_recent_docs_parses_microsecond_timestamps():
+    """Timestamps with fractional seconds should be parsed correctly."""
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "1",
+                "name": "Micro",
+                "modifiedTime": "2024-01-02T00:00:00.123456Z",
+            },
+            {
+                "id": "2",
+                "name": "SharedMicro",
+                "sharedWithMeTime": "2024-01-02T00:00:00.654321Z",
+            },
+        ]
+    }
+    since = datetime(2024, 1, 1, 23, 59, 59)
+    files = list_recent_docs(service, since)
+    assert {f["name"] for f in files} == {"Micro", "SharedMicro"}
 
 
 def test_app_properties_roundtrip():
