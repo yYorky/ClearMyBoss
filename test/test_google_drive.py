@@ -25,7 +25,7 @@ def test_list_recent_docs_filters_by_time():
             {"id": "1", "name": "Doc1", "modifiedTime": "2024-01-01T00:00:00Z"}
         ]
     }
-    since = datetime.utcnow() - timedelta(days=1)
+    since = datetime(2023, 12, 31, 23, 0, 0)
     files = list_recent_docs(service, since)
     service.files.assert_called_once()
     assert files[0]["name"] == "Doc1"
@@ -49,7 +49,7 @@ def test_list_recent_docs_includes_newly_shared_docs():
     iso_time = since.isoformat("T") + "Z"
     expected_query = (
         "mimeType='application/vnd.google-apps.document' "
-        f"and (modifiedTime > '{iso_time}' or sharedWithMeTime > '{iso_time}')"
+        f"and (modifiedTime > '{iso_time}' or sharedWithMe = true)"
     )
     service.files.return_value.list.assert_called_once_with(
         q=expected_query,
