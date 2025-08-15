@@ -228,6 +228,7 @@ def post_comments(drive_service: Any, document_id: str, items: List[Dict[str, st
             parts[0],
             item.get("start_index"),
             item.get("end_index"),
+            item.get("quote"),
         )
         # Post remaining parts as replies
         for part in parts[1:]:
