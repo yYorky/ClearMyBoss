@@ -69,7 +69,15 @@ class RateLimiter:
                     self.calls.append(now)
                     return
 
-                wait_window = self.calls[0] + 60 - now if self.calls else 0
+                # Only apply the 60-second sliding window wait if we've already
+                # reached the maximum number of calls for the window. When below
+                # the limit we only need to enforce the minimum spacing between
+                # consecutive calls.
+                wait_window = (
+                    self.calls[0] + 60 - now
+                    if len(self.calls) >= self.max_calls
+                    else 0
+                )
                 wait_spacing = (
                     self.calls[-1] + min_interval - now if self.calls else 0
                 )
