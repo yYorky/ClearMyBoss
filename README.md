@@ -42,7 +42,7 @@ Environment variables are loaded from `.env`:
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Path to service account credentials |
 | `GOOGLE_APPS_SCRIPT_ID` | ID of deployed Apps Script used for commenting |
 | `GROQ_CHUNK_SIZE` | Max bytes per request to Groq (default `20000`) |
-| `GROQ_REQUESTS_PER_MINUTE` | Rate limit threshold (default `25`) |
+| `GROQ_REQUESTS_PER_MINUTE` | Requests per minute before throttling (default `10`) |
 
 ## Running
 
@@ -50,6 +50,10 @@ Environment variables are loaded from `.env`:
 pip install -r requirements.txt
 python -m src.main
 ```
+
+Set `GROQ_REQUESTS_PER_MINUTE` in your `.env` to match the limits of your Groq plan.
+Exceeding this value results in `429 Too Many Requests`; the client will back off and
+temporarily reduce its rate based on Groq's `Retry-After` hints.
 
 The service checks for new documents every minute and posts comments automatically.
 

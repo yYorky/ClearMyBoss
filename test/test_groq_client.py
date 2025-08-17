@@ -195,6 +195,37 @@ def test_rate_limiter_sliding_window(monkeypatch):
     assert sleeps == [10.0]
 
 
+def test_rate_limiter_reduce_rate(monkeypatch):
+    import src.groq_client as gc
+    from src.groq_client import RateLimiter
+
+    times = [0.0]
+    sleeps: list[float] = []
+
+    def fake_time() -> float:
+        return times[0]
+
+    def fake_sleep(s: float) -> None:
+        sleeps.append(s)
+        times[0] += s
+
+    monkeypatch.setattr(gc.time, "time", fake_time)
+    monkeypatch.setattr(gc.time, "sleep", fake_sleep)
+
+    rl = RateLimiter(60)
+    rl.reduce_rate(5)
+    rl.acquire()
+    rl.acquire()
+
+    # Second call should wait 5 seconds due to throttling
+    assert sleeps == [5.0]
+
+    # Advance time past the cooldown and ensure rate restores
+    times[0] = 11
+    rl.acquire()
+    assert rl.max_calls == rl.base_max_calls
+
+
 def test_rate_limiter_thread_safety(monkeypatch):
     import threading
     import src.groq_client as gc

@@ -66,9 +66,21 @@ class RateLimiter:
     """
 
     def __init__(self, requests_per_minute: int) -> None:
-        self.max_calls = max(1, requests_per_minute)
+        self.base_max_calls = max(1, requests_per_minute)
+        self.max_calls = self.base_max_calls
         self.lock = threading.Lock()
         self.calls: deque[float] = deque()
+        self.throttle_reset = 0.0
+
+    def reduce_rate(self, retry_after: float) -> None:
+        """Temporarily slow the rate based on a ``Retry-After`` hint."""
+        with self.lock:
+            try:
+                new_rate = int(60 / retry_after)
+            except Exception:
+                new_rate = 1
+            self.max_calls = max(1, min(self.max_calls, new_rate))
+            self.throttle_reset = max(self.throttle_reset, time.time() + retry_after)
 
     def acquire(self) -> None:
         """Block until another call is allowed.
@@ -79,10 +91,13 @@ class RateLimiter:
         back-to-back requests that could trigger rate limits.
         """
 
-        min_interval = 60 / self.max_calls
         while True:
             with self.lock:
                 now = time.time()
+                if self.throttle_reset and now >= self.throttle_reset:
+                    self.max_calls = self.base_max_calls
+                    self.throttle_reset = 0.0
+                min_interval = 60 / self.max_calls
                 # Remove timestamps outside the 60 second window
                 while self.calls and now - self.calls[0] >= 60:
                     self.calls.popleft()
@@ -93,14 +108,8 @@ class RateLimiter:
                     self.calls.append(now)
                     return
 
-                # Only apply the 60-second sliding window wait if we've already
-                # reached the maximum number of calls for the window. When below
-                # the limit we only need to enforce the minimum spacing between
-                # consecutive calls.
                 wait_window = (
-                    self.calls[0] + 60 - now
-                    if len(self.calls) >= self.max_calls
-                    else 0
+                    self.calls[0] + 60 - now if len(self.calls) >= self.max_calls else 0
                 )
                 wait_spacing = (
                     self.calls[-1] + min_interval - now if self.calls else 0
@@ -176,6 +185,7 @@ def get_suggestions(
                         wait = float(retry_after)
                     except (TypeError, ValueError):
                         wait = _backoff
+                    rate_limiter.reduce_rate(wait)
                     jitter = random.uniform(0, wait / 2)
                     logger.warning(
                         "Groq rate limited (429). Retrying in %.2f seconds (attempt %s/%s)",
