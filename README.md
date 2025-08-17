@@ -40,7 +40,7 @@ Environment variables are loaded from `.env`:
 | -------- | ----------- |
 | `GROQ_API_KEY` | Groq API token |
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Path to service account credentials |
-| `GOOGLE_APPS_SCRIPT_ID` | ID of deployed Apps Script used for commenting |
+| `GOOGLE_APPS_SCRIPT_ID` | ID of deployed Apps Script used for commenting<br>1. Open the Apps Script project.<br>2. Go to **Project Settings** → copy the **Script ID**.<br>3. Place it in `.env` as `GOOGLE_APPS_SCRIPT_ID=<copied_id>`. |
 | `GROQ_CHUNK_SIZE` | Max bytes per request to Groq (default `20000`) |
 | `GROQ_REQUESTS_PER_MINUTE` | Requests per minute before throttling (default `10`) |
 
