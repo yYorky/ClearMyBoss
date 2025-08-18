@@ -8,7 +8,6 @@ from typing import Any
 
 from .google_drive import build_drive_service, list_recent_docs
 from .google_docs import build_docs_service
-from .google_apps_script import build_script_service
 from .groq_client import get_suggestions
 from requests import HTTPError
 from .review import review_document, post_comments
@@ -54,9 +53,7 @@ def groq_suggest(text: str, context: str) -> dict[str, str]:
         return {"issue": "", "suggestion": "", "severity": "info"}
 
 
-def run_once(
-    drive_service: Any, docs_service: Any, script_service: Any, since: datetime
-) -> datetime:
+def run_once(drive_service: Any, docs_service: Any, since: datetime) -> datetime:
     """Process documents changed since ``since`` and return new timestamp.
 
     Documents are considered changed if they were modified or newly shared with
@@ -87,7 +84,7 @@ def run_once(
                 )
 
                 if items:
-                    post_comments(drive_service, script_service, doc_id, items)
+                    post_comments(drive_service, doc_id, items)
                     logger.info(
                         "Posted %d comments to document '%s'", len(items), doc_name
                     )
@@ -143,10 +140,6 @@ def main() -> None:
         docs_service = build_docs_service()
         logger.info("Google Docs service initialized successfully")
 
-        logger.info("Initializing Apps Script service...")
-        script_service = build_script_service()
-        logger.info("Apps Script service initialized successfully")
-        
         since = datetime.utcnow()
         logger.info(f"Initial timestamp set to: {since}")
         
@@ -156,7 +149,7 @@ def main() -> None:
             nonlocal since
             logger.info("=" * 60)
             logger.info("Scheduled job triggered - starting document review")
-            since = run_once(drive_service, docs_service, script_service, since)
+            since = run_once(drive_service, docs_service, since)
             logger.info("Scheduled job completed")
             logger.info("=" * 60)
         

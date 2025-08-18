@@ -1,5 +1,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock
+import json
 import pytest
 
 from src.google_drive import (
@@ -13,6 +14,7 @@ from src.google_drive import (
     list_comments,
     list_replies,
     filter_user_comments,
+    create_anchored_comment,
 )
 
 
@@ -124,6 +126,17 @@ def test_get_share_message_fetches_description():
     assert msg == "context"
     service.files.return_value.get.assert_called_once_with(
         fileId="file", fields="description"
+    )
+
+
+def test_create_anchored_comment():
+    service = MagicMock()
+    service.comments.return_value.create.return_value.execute.return_value = {"id": "c1"}
+    anchor = json.dumps({"r": {"segmentId": "", "startIndex": 1, "endIndex": 3}})
+    result = create_anchored_comment(service, "file", "hi", anchor)
+    assert result == {"id": "c1"}
+    service.comments.return_value.create.assert_called_once_with(
+        fileId="file", body={"content": "hi", "anchor": anchor}, fields="id"
     )
 
 
