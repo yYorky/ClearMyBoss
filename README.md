@@ -1,72 +1,93 @@
-# ClearMyBoss
+# 📄 ClearMyBoss
 
-ClearMyBoss automatically reviews Google Docs and leaves concise, boss-like comments powered by Groq's large language models.
+![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
+![Groq](https://img.shields.io/badge/LLM-Groq-brightgreen?logo=groq)
+![Google Docs](https://img.shields.io/badge/API-Google%20Docs-blue?logo=google)
+![Google Drive](https://img.shields.io/badge/API-Google%20Drive-blue?logo=google-drive)
+![Google Apps Script](https://img.shields.io/badge/API-Google%20Apps%20Script-yellow?logo=google)
+![License](https://img.shields.io/badge/license-MIT-lightgrey)
+![Tests](https://img.shields.io/badge/tests-passing-brightgreen?logo=pytest)
 
-## Objective
+ClearMyBoss automatically reviews Google Docs and leaves concise, boss‑like comments powered by Groq's large language models.
 
-Provide an autonomous "boss" that reviews documents shared with a service account and offers direct, helpful feedback without human involvement.
+---
 
-## Features
+## 🎯 Objective
 
-- **Drive & Docs integration** – Polls Google Drive for documents that were modified or newly shared and retrieves their paragraph text.
-- **Change tracking** – Compares the current revision against the last reviewed revision to isolate just the edited sections.
-- **LLM suggestions** – Sends changed text to Groq's Chat Completions API, handling chunking, retries, and rate limiting.
-- **Automated comments** – Posts feedback through the Apps Script Execution API, anchoring comments to character offsets and threading long replies.
-- **Deduplication** – Stores hashes of previous suggestions in Drive `appProperties` to avoid repeating comments across runs.
-- **Scheduled runner** – `main.py` uses the `schedule` library to run the review loop at regular intervals.
+Provide an autonomous **"boss" reviewer** that reviews documents shared with a service account and offers direct, helpful feedback without human involvement.
 
-## Architecture
+---
 
-1. **`src/main.py`** builds authenticated services (Drive, Docs, Apps Script) and schedules the review cycle.
-2. **`src/google_drive.py`** lists recent documents, manages file `appProperties`, downloads revisions, and handles comment threads.
-3. **`src/google_docs.py`** fetches paragraphs and groups them into size‑bound chunks.
-4. **`src/review.py`** orchestrates the review pipeline: detect changed ranges, generate suggestions, deduplicate, and post comments.
-5. **`src/groq_client.py`** wraps Groq's API with request chunking, retries with backoff, and a sliding‑window rate limiter.
-6. **`src/google_apps_script.py`** invokes an Apps Script function to create text‑anchored comments inside the document.
+## ✨ Features
 
-## Tech Stack
+* 🚀 **Drive & Docs integration** – Polls Google Drive for modified or newly shared docs and retrieves paragraph text.
+* 🔍 **Change tracking** – Detects changes by comparing the latest revision with the last reviewed version.
+* 🤖 **LLM suggestions** – Sends edited text to Groq's Chat Completions API with chunking, retries, and rate limiting.
+* 💬 **Automated comments** – Uses Google Apps Script Execution API to anchor comments at precise text offsets.
+* 🧹 **Deduplication** – Prevents repeated comments via hashed suggestion storage in Drive `appProperties`.
+* ⏱ **Scheduled runner** – Runs `main.py` periodically using the `schedule` library.
 
-- Python 3.11
-- Groq Chat Completions API
-- Google Drive, Docs & Apps Script APIs
-- `requests`, `schedule`
-- `pytest` for unit tests
+---
 
-## Configuration
+## 🏗 Architecture
+
+1. **`src/main.py`** – Initializes authenticated services (Drive, Docs, Apps Script) and schedules the review cycle.
+2. **`src/google_drive.py`** – Manages file listings, appProperties, revisions, and comment threads.
+3. **`src/google_docs.py`** – Extracts and chunks document paragraphs.
+4. **`src/review.py`** – Orchestrates review: change detection → suggestion generation → deduplication → posting.
+5. **`src/groq_client.py`** – Handles Groq API requests with retries, chunking, and rate limiting.
+6. **`src/google_apps_script.py`** – Invokes Apps Script for text‑anchored inline comments.
+
+---
+
+## 🛠 Tech Stack
+
+* ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python) Python 3.11
+* ![Groq](https://img.shields.io/badge/LLM-Groq-brightgreen?logo=groq) Groq Chat Completions API
+* ![Google Docs](https://img.shields.io/badge/API-Google%20Docs-blue?logo=google) Google Docs, Drive & Apps Script APIs
+* `requests`, `schedule`
+* ![Pytest](https://img.shields.io/badge/tests-Pytest-brightgreen?logo=pytest) `pytest` for unit testing
+
+---
+
+## ⚙️ Configuration
 
 Environment variables are loaded from `.env`:
 
-| Variable | Description |
-| -------- | ----------- |
-| `GROQ_API_KEY` | Groq API token |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Path to service account credentials |
-| `GOOGLE_APPS_SCRIPT_ID` | ID of deployed Apps Script used for commenting<br>1. Open the Apps Script project.<br>2. Go to **Project Settings** → copy the **Script ID**.<br>3. Place it in `.env` as `GOOGLE_APPS_SCRIPT_ID=<copied_id>`. |
-| `GROQ_CHUNK_SIZE` | Max bytes per request to Groq (default `20000`) |
-| `GROQ_REQUESTS_PER_MINUTE` | Requests per minute before throttling (default `10`) |
+| Variable                      | Description                                                                                                                                                             |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GROQ_API_KEY`                | Groq API token                                                                                                                                                          |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Path to service account credentials                                                                                                                                     |
+| `GOOGLE_APPS_SCRIPT_ID`       | ID of deployed Apps Script used for commenting<br>1. Open Apps Script → **Project Settings** → copy **Script ID**.<br>2. Add to `.env` as `GOOGLE_APPS_SCRIPT_ID=<id>`. |
+| `GROQ_CHUNK_SIZE`             | Max bytes per request to Groq (default `20000`)                                                                                                                         |
+| `GROQ_REQUESTS_PER_MINUTE`    | Requests per minute before throttling (default `10`)                                                                                                                    |
 
-## Running
+---
+
+## ▶️ Running
 
 ```bash
 pip install -r requirements.txt
 python -m src.main
 ```
 
-Set `GROQ_REQUESTS_PER_MINUTE` in your `.env` to match the limits of your Groq plan.
-Exceeding this value results in `429 Too Many Requests`; the client will back off and
-temporarily reduce its rate based on Groq's `Retry-After` hints.
+* The service checks for new/edited documents every minute.
+* `GROQ_REQUESTS_PER_MINUTE` must match your Groq plan limits.
+* If exceeded, the client backs off using Groq's `Retry-After` hints.
 
-The service checks for new documents every minute and posts comments automatically.
+---
 
-## Testing
+## 🧪 Testing
 
 ```bash
 pytest
 ```
 
-## Repository Layout
+---
 
-- `src/` – application source code
-- `config/` – environment‑based settings
-- `test/` – unit tests
-- `PRD.md`, `SprintPlanning.md` – project planning documents
+## 📂 Repository Layout
 
+* `src/` – application source code
+* `config/` – environment settings
+* `test/` – unit tests
+* `PRD.md`, `SprintPlanning.md` – planning docs
