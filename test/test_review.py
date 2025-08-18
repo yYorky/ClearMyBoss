@@ -209,7 +209,7 @@ def test_post_comments_calls_create(monkeypatch):
             "end_index": 3,
         }
     ]
-    post_comments("drive", "script", "doc1", items)
+    post_comments("drive", "doc1", items)
     assert create_calls == [("doc1", "Fix typo", 1, 3)]
     assert reply_calls == []
 
@@ -238,7 +238,7 @@ def test_post_comments_splits_long_comments(monkeypatch):
             "end_index": 1,
         }
     ]
-    post_comments("drive", "script", "doc1", items)
+    post_comments("drive", "doc1", items)
 
     # First chunk is posted as the main comment, remaining as replies
     assert len(create_calls) == 1

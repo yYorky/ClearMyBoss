@@ -4,7 +4,6 @@
 ![Groq](https://img.shields.io/badge/LLM-Groq-brightgreen?logo=groq)
 ![Google Docs](https://img.shields.io/badge/API-Google%20Docs-blue?logo=google)
 ![Google Drive](https://img.shields.io/badge/API-Google%20Drive-blue?logo=google-drive)
-![Google Apps Script](https://img.shields.io/badge/API-Google%20Apps%20Script-yellow?logo=google)
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Tests](https://img.shields.io/badge/tests-passing-brightgreen?logo=pytest)
 
@@ -23,7 +22,7 @@ Provide an autonomous **"boss" reviewer** that reviews documents shared with a s
 * 🚀 **Drive & Docs integration** – Polls Google Drive for modified or newly shared docs and retrieves paragraph text.
 * 🔍 **Change tracking** – Detects changes by comparing the latest revision with the last reviewed version.
 * 🤖 **LLM suggestions** – Sends edited text to Groq's Chat Completions API with chunking, retries, and rate limiting.
-* 💬 **Automated comments** – Uses Google Apps Script Execution API to anchor comments at precise text offsets.
+* 💬 **Automated comments** – Uses the Google Drive API to anchor comments at precise text ranges.
 * 📝 **Context-aware feedback** – Treats a document's description as extra context for the reviewer.
 * ♻️ **Revision-aware deduplication** – Stores the last reviewed revision and hashed suggestions in Drive `appProperties` to skip repeated comments.
 * ⏱ **Scheduled runner** – Runs `main.py` periodically using the `schedule` library.
@@ -32,12 +31,11 @@ Provide an autonomous **"boss" reviewer** that reviews documents shared with a s
 
 ## 🏗 Architecture
 
-1. **`src/main.py`** – Initializes authenticated services (Drive, Docs, Apps Script) and schedules the review cycle.
-2. **`src/google_drive.py`** – Manages file listings, appProperties, revisions, and comment threads.
+1. **`src/main.py`** – Initializes authenticated Drive & Docs services and schedules the review cycle.
+2. **`src/google_drive.py`** – Manages file listings, appProperties, revisions, comment threads, and comment creation.
 3. **`src/google_docs.py`** – Extracts and chunks document paragraphs.
 4. **`src/review.py`** – Orchestrates review: change detection → suggestion generation → deduplication → posting.
 5. **`src/groq_client.py`** – Handles Groq API requests with retries, chunking, and rate limiting.
-6. **`src/google_apps_script.py`** – Invokes Apps Script for text‑anchored inline comments.
 
 ---
 
@@ -45,7 +43,7 @@ Provide an autonomous **"boss" reviewer** that reviews documents shared with a s
 
 ```mermaid
 flowchart TD
-    A[Start `main.py`] --> B[Init Drive, Docs, Apps Script services]
+    A[Start `main.py`] --> B[Init Drive & Docs services]
     B --> C[Set `since` timestamp]
     C --> D{Every minute}
     D --> E[List docs changed since `since`]
@@ -66,7 +64,7 @@ sequenceDiagram
     C->>GDocs: Fetch paragraphs & metadata
     C->>LLM: Request suggestions
     LLM-->>C: Return feedback
-    C->>GDocs: Post comments via Apps Script
+    C->>GDocs: Post comments via Drive API
     GDocs-->>U: Comments appear in doc
 ```
 
@@ -76,7 +74,7 @@ sequenceDiagram
 
 * ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python) Python 3.11
 * ![Groq](https://img.shields.io/badge/LLM-Groq-brightgreen?logo=groq) Groq Chat Completions API
-* ![Google Docs](https://img.shields.io/badge/API-Google%20Docs-blue?logo=google) Google Docs, Drive & Apps Script APIs
+* ![Google Docs](https://img.shields.io/badge/API-Google%20Docs-blue?logo=google) Google Docs & Drive APIs
 * `requests`, `schedule`
 * ![Pytest](https://img.shields.io/badge/tests-Pytest-brightgreen?logo=pytest) `pytest` for unit testing
 
@@ -86,15 +84,21 @@ sequenceDiagram
 
 Environment variables are loaded from `.env`:
 
-| Variable                      | Description                                                                                                                                                             |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GROQ_API_KEY`                | Groq API token                                                                                                                                                          |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Path to service account credentials                                                                                                                                     |
-| `GOOGLE_APPS_SCRIPT_ID`       | ID of deployed Apps Script used for commenting<br>1. Open Apps Script → **Project Settings** → copy **Script ID**.<br>2. Add to `.env` as `GOOGLE_APPS_SCRIPT_ID=<id>`. |
-| `GROQ_CHUNK_SIZE`             | Max bytes per request to Groq (default `20000`)                                                                                                                         |
-| `GROQ_REQUESTS_PER_MINUTE`    | Requests per minute before throttling (default `10`)                                                                                                                    |
+| Variable | Description |
+| --- | --- |
+| `GROQ_API_KEY` | Groq API token |
+| `GOOGLE_SERVICE_ACCOUNT_JSON` | Path to service account credentials with permission to comment on shared Docs |
+| `GROQ_CHUNK_SIZE` | Max bytes per request to Groq (default `20000`) |
+| `GROQ_REQUESTS_PER_MINUTE` | Requests per minute before throttling (default `10`) |
 
 ---
+
+### Drive comment flow
+
+ClearMyBoss adds comments directly through the Google Drive API. Comments are
+anchored to document text using start and end indices. The service account must
+be shared on the document with permission to comment ("Commenter" or
+"Editor") so that it can create and reply to threads.
 
 ## ▶️ Running
 

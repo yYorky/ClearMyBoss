@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from datetime import datetime
 import os
+import json
 from typing import List, Dict, Any
 
 from google.oauth2 import service_account
@@ -131,6 +132,30 @@ def get_share_message(service: Any, file_id: str) -> str:
         .execute()
     )
     return result.get("description", "")
+
+
+def create_comment(
+    service: Any,
+    file_id: str,
+    content: str,
+    start_index: int | None = None,
+    end_index: int | None = None,
+) -> Dict[str, str]:
+    """Create a comment on ``file_id`` anchored to an optional text range."""
+
+    body: Dict[str, Any] = {"content": content}
+    if start_index is not None and end_index is not None:
+        anchor = {
+            "r": [
+                {"segmentId": "", "startIndex": start_index, "endIndex": end_index}
+            ]
+        }
+        body["anchor"] = json.dumps(anchor)
+    return (
+        service.comments()
+        .create(fileId=file_id, body=body, fields="id")
+        .execute()
+    )
 
 
 def reply_to_comment(
