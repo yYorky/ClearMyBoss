@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import os
 from typing import List, Dict, Any
 
@@ -131,6 +132,18 @@ def get_share_message(service: Any, file_id: str) -> str:
         .execute()
     )
     return result.get("description", "")
+
+
+def create_anchored_comment(
+    service: Any, file_id: str, content: str, anchor: str | None
+) -> Any:
+    """Create a comment anchored to a text range."""
+    body: Dict[str, Any] = {"content": content}
+    if anchor:
+        body["anchor"] = anchor
+    return (
+        service.comments().create(fileId=file_id, body=body, fields="id").execute()
+    )
 
 
 def reply_to_comment(

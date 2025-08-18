@@ -3,16 +3,17 @@ from __future__ import annotations
 from typing import Any, Callable, Dict, List, Set, Tuple
 import hashlib
 import logging
+import json
 from difflib import SequenceMatcher
 
 from .google_docs import chunk_paragraphs, get_document_paragraphs
-from .google_apps_script import create_comment
 from .google_drive import (
     download_revision_text,
     get_app_properties,
     get_share_message,
     update_app_properties,
     reply_to_comment,
+    create_anchored_comment,
 )
 
 
@@ -198,7 +199,6 @@ def review_document(
 
 def post_comments(
     drive_service: Any,
-    script_service: Any,
     document_id: str,
     items: List[Dict[str, str]],
 ) -> None:
@@ -233,12 +233,15 @@ def post_comments(
         content = "\n".join(lines)
         parts = _chunk_content(content)
         # Post the first part anchored to the text range
-        comment = create_comment(
-            script_service,
-            document_id,
-            parts[0],
-            item.get("start_index"),
-            item.get("end_index"),
+        start = item.get("start_index")
+        end = item.get("end_index")
+        anchor = None
+        if start is not None and end is not None:
+            anchor = json.dumps(
+                {"r": {"segmentId": "", "startIndex": start, "endIndex": end}}
+            )
+        comment = create_anchored_comment(
+            drive_service, document_id, parts[0], anchor
         )
         # Post remaining parts as replies
         for part in parts[1:]:
