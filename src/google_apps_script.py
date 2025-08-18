@@ -63,3 +63,42 @@ def create_comment(
         comment_id = str(result)
     return {"id": comment_id}
 
+
+def create_anchored_comment(
+    service: Any,
+    document_id: str,
+    content: str,
+    anchor: Dict[str, Any] | None,
+) -> Dict[str, str]:
+    """Add a comment anchored to a specific range via Apps Script.
+
+    Parameters
+    ----------
+    service:
+        Authenticated Apps Script service instance.
+    document_id:
+        ID of the document to comment on.
+    content:
+        Text content of the comment.
+    anchor:
+        JSON object containing ``startIndex`` and ``endIndex`` keys specifying
+        the document range to anchor the comment to.
+
+    Returns
+    -------
+    Dict containing the ``id`` of the created comment.
+    """
+
+    script_id = settings.GOOGLE_APPS_SCRIPT_ID
+    if not script_id:
+        raise ValueError("GOOGLE_APPS_SCRIPT_ID is not set")
+
+    body: Dict[str, Any] = {
+        "function": "addAnchoredComment",
+        "parameters": [document_id, anchor, content],
+    }
+    response = service.scripts().run(scriptId=script_id, body=body).execute()
+    result = response.get("response", {}).get("result", {})
+    comment_id = result.get("id", "") if isinstance(result, dict) else str(result)
+    return {"id": comment_id}
+
