@@ -10,6 +10,8 @@ from googleapiclient.discovery import build
 
 from config import settings
 
+import json
+
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
@@ -131,6 +133,23 @@ def get_share_message(service: Any, file_id: str) -> str:
         .execute()
     )
     return result.get("description", "")
+
+
+def create_comment(
+    service: Any,
+    file_id: str,
+    content: str,
+    anchor: Dict[str, Any] | None = None,
+) -> Dict[str, str]:
+    """Create a comment on ``file_id`` optionally anchored to a text range."""
+    body: Dict[str, Any] = {"content": content}
+    if anchor is not None:
+        body["anchor"] = json.dumps({"r": anchor})
+    return (
+        service.comments()
+        .create(fileId=file_id, body=body, fields="id")
+        .execute()
+    )
 
 
 def reply_to_comment(
