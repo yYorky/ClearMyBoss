@@ -198,7 +198,7 @@ def test_post_comments_calls_create(monkeypatch):
     def fake_reply(service, file_id, comment_id, content):
         reply_calls.append((file_id, comment_id, content))
 
-    monkeypatch.setattr("src.review.create_anchored_comment", fake_create)
+    monkeypatch.setattr("src.review.create_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
     items = [
         {
@@ -209,7 +209,7 @@ def test_post_comments_calls_create(monkeypatch):
             "end_index": 3,
         }
     ]
-    post_comments("script", "drive", "doc1", items)
+    post_comments("drive", "doc1", items)
     expected_anchor = {"segmentId": "", "startIndex": 1, "endIndex": 3}
     assert create_calls == [("doc1", "Fix typo", expected_anchor)]
     assert reply_calls == []
@@ -226,7 +226,7 @@ def test_post_comments_splits_long_comments(monkeypatch):
     def fake_reply(service, file_id, comment_id, content):
         reply_calls.append((file_id, comment_id, content))
 
-    monkeypatch.setattr("src.review.create_anchored_comment", fake_create)
+    monkeypatch.setattr("src.review.create_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
 
     long_text = "a" * 5000
@@ -239,7 +239,7 @@ def test_post_comments_splits_long_comments(monkeypatch):
             "end_index": 1,
         }
     ]
-    post_comments("script", "drive", "doc1", items)
+    post_comments("drive", "doc1", items)
 
     # First chunk is posted as the main comment, remaining as replies
     assert len(create_calls) == 1
