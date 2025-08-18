@@ -12,8 +12,8 @@ from .google_drive import (
     get_share_message,
     update_app_properties,
     reply_to_comment,
+    create_comment,
 )
-from .google_apps_script import create_anchored_comment
 
 
 # Maximum allowed bytes for a single app property (key + value).
@@ -197,7 +197,6 @@ def review_document(
 
 
 def post_comments(
-    script_service: Any,
     drive_service: Any,
     document_id: str,
     items: List[Dict[str, str]],
@@ -238,8 +237,8 @@ def post_comments(
         anchor = None
         if start is not None and end is not None:
             anchor = {"segmentId": "", "startIndex": start, "endIndex": end}
-        comment = create_anchored_comment(
-            script_service, document_id, parts[0], anchor
+        comment = create_comment(
+            drive_service, document_id, parts[0], anchor
         )
         # Post remaining parts as replies
         for part in parts[1:]:
