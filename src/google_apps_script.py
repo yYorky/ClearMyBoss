@@ -23,14 +23,13 @@ def build_script_service() -> Any:
     return build("script", "v1", credentials=creds)
 
 
-def create_comment(
+def create_anchored_comment(
     service: Any,
     document_id: str,
     content: str,
-    start_index: int | None = None,
-    end_index: int | None = None,
+    anchor: Dict[str, int] | None = None,
 ) -> Dict[str, str]:
-    """Add a text-anchored comment via an Apps Script function.
+    """Add an anchored comment via an Apps Script function.
 
     Parameters
     ----------
@@ -40,8 +39,9 @@ def create_comment(
         ID of the document to comment on.
     content
         Text content of the comment.
-    start_index, end_index
-        Character offsets within the document's body to anchor the comment.
+    anchor
+        JSON dict specifying the text range to anchor the comment. The dict
+        should include ``startIndex`` and ``endIndex`` keys.
 
     Returns
     -------
@@ -52,8 +52,8 @@ def create_comment(
         raise ValueError("GOOGLE_APPS_SCRIPT_ID is not set")
 
     body: Dict[str, Any] = {
-        "function": "addComment",
-        "parameters": [document_id, start_index, end_index, content],
+        "function": "addAnchoredComment",
+        "parameters": [document_id, anchor, content],
     }
     response = service.scripts().run(scriptId=script_id, body=body).execute()
     result = response.get("response", {}).get("result", {})

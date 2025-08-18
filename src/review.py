@@ -6,7 +6,7 @@ import logging
 from difflib import SequenceMatcher
 
 from .google_docs import chunk_paragraphs, get_document_paragraphs
-from .google_apps_script import create_comment
+from .google_apps_script import create_anchored_comment
 from .google_drive import (
     download_revision_text,
     get_app_properties,
@@ -233,12 +233,15 @@ def post_comments(
         content = "\n".join(lines)
         parts = _chunk_content(content)
         # Post the first part anchored to the text range
-        comment = create_comment(
+        anchor = {
+            "startIndex": item.get("start_index"),
+            "endIndex": item.get("end_index"),
+        }
+        comment = create_anchored_comment(
             script_service,
             document_id,
             parts[0],
-            item.get("start_index"),
-            item.get("end_index"),
+            anchor,
         )
         # Post remaining parts as replies
         for part in parts[1:]:

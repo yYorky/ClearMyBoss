@@ -191,14 +191,14 @@ def test_post_comments_calls_create(monkeypatch):
     create_calls = []
     reply_calls = []
 
-    def fake_create(service, file_id, content, start_index=None, end_index=None):
-        create_calls.append((file_id, content, start_index, end_index))
+    def fake_create(service, file_id, content, anchor):
+        create_calls.append((file_id, content, anchor))
         return {"id": "c1"}
 
     def fake_reply(service, file_id, comment_id, content):
         reply_calls.append((file_id, comment_id, content))
 
-    monkeypatch.setattr("src.review.create_comment", fake_create)
+    monkeypatch.setattr("src.review.create_anchored_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
     items = [
         {
@@ -210,7 +210,9 @@ def test_post_comments_calls_create(monkeypatch):
         }
     ]
     post_comments("drive", "script", "doc1", items)
-    assert create_calls == [("doc1", "Fix typo", 1, 3)]
+    assert create_calls == [
+        ("doc1", "Fix typo", {"startIndex": 1, "endIndex": 3})
+    ]
     assert reply_calls == []
 
 
@@ -218,14 +220,14 @@ def test_post_comments_splits_long_comments(monkeypatch):
     create_calls = []
     reply_calls = []
 
-    def fake_create(service, file_id, content, start_index=None, end_index=None):
-        create_calls.append((file_id, content, start_index, end_index))
+    def fake_create(service, file_id, content, anchor):
+        create_calls.append((file_id, content, anchor))
         return {"id": "c1"}
 
     def fake_reply(service, file_id, comment_id, content):
         reply_calls.append((file_id, comment_id, content))
 
-    monkeypatch.setattr("src.review.create_comment", fake_create)
+    monkeypatch.setattr("src.review.create_anchored_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
 
     long_text = "a" * 5000
