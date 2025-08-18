@@ -1,5 +1,4 @@
 from unittest.mock import MagicMock
-import json
 
 from src.review import (
     _hash,
@@ -210,8 +209,8 @@ def test_post_comments_calls_create(monkeypatch):
             "end_index": 3,
         }
     ]
-    post_comments("drive", "doc1", items)
-    expected_anchor = json.dumps({"r": {"segmentId": "", "startIndex": 1, "endIndex": 3}})
+    post_comments("script", "drive", "doc1", items)
+    expected_anchor = {"segmentId": "", "startIndex": 1, "endIndex": 3}
     assert create_calls == [("doc1", "Fix typo", expected_anchor)]
     assert reply_calls == []
 
@@ -240,7 +239,7 @@ def test_post_comments_splits_long_comments(monkeypatch):
             "end_index": 1,
         }
     ]
-    post_comments("drive", "doc1", items)
+    post_comments("script", "drive", "doc1", items)
 
     # First chunk is posted as the main comment, remaining as replies
     assert len(create_calls) == 1
@@ -248,7 +247,7 @@ def test_post_comments_splits_long_comments(monkeypatch):
     # Ensure the created comment respects size limit
     assert len(create_calls[0][1].encode("utf-8")) <= 4096
     assert len(reply_calls[0][2].encode("utf-8")) <= 4096
-    expected_anchor = json.dumps({"r": {"segmentId": "", "startIndex": 0, "endIndex": 1}})
+    expected_anchor = {"segmentId": "", "startIndex": 0, "endIndex": 1}
     assert create_calls[0][2] == expected_anchor
 
 

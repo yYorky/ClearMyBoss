@@ -2,9 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-import json
 import os
-import json
 from typing import List, Dict, Any
 
 from google.oauth2 import service_account
@@ -135,18 +133,6 @@ def get_share_message(service: Any, file_id: str) -> str:
     return result.get("description", "")
 
 
-def create_anchored_comment(
-    service: Any, file_id: str, content: str, anchor: str | None
-) -> Any:
-    """Create a comment anchored to a text range."""
-    body: Dict[str, Any] = {"content": content}
-    if anchor:
-        body["anchor"] = anchor
-    return (
-        service.comments().create(fileId=file_id, body=body, fields="id").execute()
-    )
-
-
 def reply_to_comment(
     service: Any, file_id: str, comment_id: str, content: str
 ) -> Any:
@@ -157,54 +143,6 @@ def reply_to_comment(
         .create(fileId=file_id, commentId=comment_id, body=body, fields="id")
         .execute()
     )
-
-
-def create_anchored_comment(
-    service: Any,
-    file_id: str,
-    content: str,
-    start_index: int,
-    end_index: int,
-) -> str:
-    """Create a new comment anchored to a text range.
-
-    Parameters
-    ----------
-    service
-        Authenticated Google Drive service instance.
-    file_id
-        ID of the document to comment on.
-    content
-        Comment text.
-    start_index, end_index
-        Text range to anchor the comment to.
-
-    Returns
-    -------
-    str
-        The ID of the created comment.
-    """
-
-    anchor = json.dumps(
-        {
-            "r": "head",
-            "a": [
-                {
-                    "txt": {
-                        "start_index": start_index,
-                        "end_index": end_index,
-                    }
-                }
-            ],
-        }
-    )
-    body = {"content": content, "anchor": anchor}
-    result = (
-        service.comments()
-        .create(fileId=file_id, body=body, fields="id")
-        .execute()
-    )
-    return result.get("id", "")
 
 
 def list_comments(service: Any, file_id: str) -> List[Dict[str, Any]]:
