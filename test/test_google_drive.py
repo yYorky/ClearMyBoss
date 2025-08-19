@@ -13,7 +13,6 @@ from src.google_drive import (
     build_drive_service,
     list_comments,
     list_replies,
-    filter_user_comments,
     create_comment,
 )
 
@@ -158,24 +157,6 @@ def test_list_comments_and_replies():
         commentId="c1",
         fields="replies(id,author(displayName),content)",
     )
-
-
-def test_filter_user_comments_skips_ai_threads():
-    service = MagicMock()
-    service.comments.return_value.list.return_value.execute.return_value = {
-        "comments": [
-            {"id": "c1", "author": {"displayName": "User1"}},
-            {"id": "c2", "author": {"displayName": "BossBot"}},
-            {"id": "c3", "author": {"displayName": "User2"}},
-        ]
-    }
-    service.replies.return_value.list.return_value.execute.side_effect = [
-        {"replies": [{"author": {"displayName": "BossBot"}}]},
-        {"replies": []},
-        {"replies": [{"author": {"displayName": "User2"}}]},
-    ]
-    threads = filter_user_comments(service, "file", "BossBot")
-    assert [c["id"] for c in threads] == ["c3"]
 
 
 def test_build_drive_service_missing_credentials(monkeypatch):

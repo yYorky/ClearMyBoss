@@ -162,21 +162,3 @@ def list_replies(service: Any, file_id: str, comment_id: str) -> List[Dict[str, 
         .execute()
     )
     return result.get("replies", [])
-
-
-def filter_user_comments(
-    service: Any, file_id: str, ai_display_name: str
-) -> List[Dict[str, Any]]:
-    """Return comment threads whose latest author is not the AI reviewer."""
-    comments = list_comments(service, file_id)
-    user_threads: List[Dict[str, Any]] = []
-    for comment in comments:
-        replies = list_replies(service, file_id, comment["id"])
-        last_author = (
-            replies[-1].get("author", {}).get("displayName", "")
-            if replies
-            else comment.get("author", {}).get("displayName", "")
-        )
-        if last_author != ai_display_name:
-            user_threads.append(comment)
-    return user_threads
