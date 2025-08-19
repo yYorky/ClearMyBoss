@@ -38,18 +38,26 @@ def list_recent_docs(service: Any, since_time: datetime) -> list[dict[str, Any]]
         "mimeType='application/vnd.google-apps.document' "
         f"and (modifiedTime > '{iso_time}' or sharedWithMe = true)"
     )
-    results = (
-        service.files()
-        .list(
-            q=query,
-            fields="files(id, name, modifiedTime, sharedWithMeTime)",
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-            corpora="allDrives",
-        )
-        .execute(num_retries=3)
-    )
-    files = results.get("files", [])
+
+    files: list[dict[str, Any]] = []
+    page_token: str | None = None
+    while True:
+        params = {
+            "q": query,
+            "fields": "nextPageToken, files(id, name, modifiedTime, sharedWithMeTime)",
+            "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True,
+            "corpora": "allDrives",
+            "pageSize": 1000,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        results = service.files().list(**params).execute(num_retries=3)
+        files.extend(results.get("files", []))
+        page_token = results.get("nextPageToken")
+        if not page_token:
+            break
+
     recent_files: list[dict[str, Any]] = []
     for f in files:
         for key in ("modifiedTime", "sharedWithMeTime"):

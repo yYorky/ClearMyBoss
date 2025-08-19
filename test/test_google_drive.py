@@ -35,10 +35,11 @@ def test_list_recent_docs_filters_by_time():
     )
     service.files.return_value.list.assert_called_once_with(
         q=expected_query,
-        fields="files(id, name, modifiedTime, sharedWithMeTime)",
+        fields="nextPageToken, files(id, name, modifiedTime, sharedWithMeTime)",
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
         corpora="allDrives",
+        pageSize=1000,
     )
     assert files[0]["name"] == "Doc1"
 
@@ -65,10 +66,11 @@ def test_list_recent_docs_includes_newly_shared_docs():
     )
     service.files.return_value.list.assert_called_once_with(
         q=expected_query,
-        fields="files(id, name, modifiedTime, sharedWithMeTime)",
+        fields="nextPageToken, files(id, name, modifiedTime, sharedWithMeTime)",
         supportsAllDrives=True,
         includeItemsFromAllDrives=True,
         corpora="allDrives",
+        pageSize=1000,
     )
     assert files[0]["name"] == "Shared"
 
@@ -93,6 +95,34 @@ def test_list_recent_docs_parses_microsecond_timestamps():
     since = datetime(2024, 1, 1, 23, 59, 59)
     files = list_recent_docs(service, since)
     assert {f["name"] for f in files} == {"Micro", "SharedMicro"}
+
+
+def test_list_recent_docs_handles_pagination():
+    service = MagicMock()
+    first_page = {"files": [], "nextPageToken": "t1"}
+    second_page = {
+        "files": [
+            {
+                "id": "new",
+                "name": "NewDoc",
+                "sharedWithMeTime": "2024-01-02T00:00:00Z",
+            }
+        ]
+    }
+    service.files.return_value.list.return_value.execute.side_effect = [
+        first_page,
+        second_page,
+    ]
+    since = datetime(2024, 1, 1, 12, 0, 0)
+    files = list_recent_docs(service, since)
+    assert files == [
+        {
+            "id": "new",
+            "name": "NewDoc",
+            "sharedWithMeTime": "2024-01-02T00:00:00Z",
+        }
+    ]
+    assert service.files.return_value.list.call_count == 2
 
 
 def test_app_properties_roundtrip():
