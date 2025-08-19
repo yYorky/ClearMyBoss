@@ -133,6 +133,19 @@ def _prune_hashes(hashes: list[str], max_bytes: int = 124) -> str:
     return joined
 
 
+def split_into_byte_chunks(text: str, max_bytes: int) -> list[str]:
+    """Split ``text`` into UTF-8 safe chunks each no larger than ``max_bytes``."""
+
+    chunks: list[str] = []
+    encoded = text.encode("utf-8")
+    while encoded:
+        piece = encoded[:max_bytes]
+        chunk = piece.decode("utf-8", errors="ignore")
+        chunks.append(chunk)
+        encoded = encoded[len(chunk.encode("utf-8")) :]
+    return chunks
+
+
 def deduplicate_suggestions(
     items: list[dict[str, str]], existing_hashes: set[str]
 ) -> list[dict[str, str]]:
@@ -207,17 +220,6 @@ def post_comments(
     """
 
     MAX_BYTES = 4096
-
-    def _chunk_content(text: str) -> list[str]:
-        """Split ``text`` into <= ``MAX_BYTES`` byte chunks."""
-        chunks: list[str] = []
-        encoded = text.encode("utf-8")
-        while encoded:
-            piece = encoded[:MAX_BYTES]
-            chunk = piece.decode("utf-8", errors="ignore")
-            chunks.append(chunk)
-            encoded = encoded[len(chunk.encode("utf-8")) :]
-        return chunks
     # Retrieve plain text of the latest revision so we can derive line numbers
     document_text = download_revision_text(drive_service, document_id, "head")
 
@@ -228,7 +230,7 @@ def post_comments(
             lines.append(issue)
         lines.append(item.get("suggestion", ""))
         content = "\n".join(lines)
-        parts = _chunk_content(content)
+        parts = split_into_byte_chunks(content, MAX_BYTES)
         # Post the first part anchored to the text range
         start = item.get("start_index")
         end = item.get("end_index")
@@ -238,13 +240,24 @@ def post_comments(
             end_line = document_text.count("\n", 0, max(end - 1, 0)) + 1
             line_count = end_line - start_line + 1
             regions = [{"line": {"n": start_line, "l": line_count}}]
-        comment = create_comment(
-            drive_service,
-            document_id,
-            parts[0],
-            revision_id="head",
-            regions=regions,
-        )
+        try:
+            comment = create_comment(
+                drive_service,
+                document_id,
+                parts[0],
+                revision_id="head",
+                regions=regions,
+            )
+        except Exception:
+            logging.exception("Failed to create comment for %s", document_id)
+            continue
         # Post remaining parts as replies
         for part in parts[1:]:
-            reply_to_comment(drive_service, document_id, comment["id"], part)
+            try:
+                reply_to_comment(drive_service, document_id, comment["id"], part)
+            except Exception:
+                logging.exception(
+                    "Failed to reply to comment %s for %s",
+                    comment.get("id"),
+                    document_id,
+                )

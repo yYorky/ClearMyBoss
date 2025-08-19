@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from src.review import (
     _hash,
     _prune_hashes,
+    split_into_byte_chunks,
     deduplicate_suggestions,
     detect_changed_ranges,
     process_changed_ranges,
@@ -295,3 +296,11 @@ def test_suggestion_hashes_property_total_size_limit():
     value = update_body["appProperties"][SUGGESTION_HASHES_KEY]
     total = len(SUGGESTION_HASHES_KEY.encode("utf-8")) + len(value.encode("utf-8"))
     assert total <= 124
+
+
+def test_split_into_byte_chunks_utf8_boundary():
+    text = "😀" * 2000
+    max_bytes = 4096
+    chunks = split_into_byte_chunks(text, max_bytes)
+    assert all(len(chunk.encode("utf-8")) <= max_bytes for chunk in chunks)
+    assert "".join(chunks) == text
