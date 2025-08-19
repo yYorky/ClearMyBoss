@@ -1,6 +1,12 @@
+"""Core review pipeline for detecting changes and posting feedback.
+
+This module orchestrates document analysis, suggestion generation, de-
+duplication, and comment posting.
+"""
+
 from __future__ import annotations
 
-from typing import Any, Callable, Dict, List, Set, Tuple
+from typing import Any, Callable
 import hashlib
 import logging
 from difflib import SequenceMatcher
@@ -23,8 +29,8 @@ SUGGESTION_HASHES_KEY = "suggestionHashes"
 
 
 def detect_changed_ranges(
-    old_paragraphs: List[str], new_paragraphs: List[str]
-) -> List[Tuple[int, int]]:
+    old_paragraphs: list[str], new_paragraphs: list[str]
+) -> list[tuple[int, int]]:
     """Return index ranges for paragraphs changed between revisions.
 
     Parameters
@@ -39,7 +45,7 @@ def detect_changed_ranges(
     in ``new_paragraphs``.
     """
     matcher = SequenceMatcher(a=old_paragraphs, b=new_paragraphs)
-    ranges: List[Tuple[int, int]] = []
+    ranges: list[tuple[int, int]] = []
     for tag, _, _, j1, j2 in matcher.get_opcodes():
         if tag != "equal":
             ranges.append((j1, j2 - 1))
@@ -47,12 +53,12 @@ def detect_changed_ranges(
 
 
 def process_changed_ranges(
-    paragraphs: List[str],
-    changed_ranges: List[Tuple[int, int]],
-    suggest_fn: Callable[[str, str], Dict[str, Any]],
+    paragraphs: list[str],
+    changed_ranges: list[tuple[int, int]],
+    suggest_fn: Callable[[str, str], dict[str, Any]],
     context: str = "",
     chunk_chars: int = 800,
-) -> List[Dict[str, str]]:
+) -> list[dict[str, str]]:
     """Run ``suggest_fn`` on changed text ranges and format results.
 
     Each changed range is further divided into chunks using
@@ -61,13 +67,13 @@ def process_changed_ranges(
     """
     # Pre-compute cumulative character offsets for each paragraph so we can
     # derive ``start_index``/``end_index`` for changed ranges.
-    offsets: List[int] = [0]
+    offsets: list[int] = [0]
     for para in paragraphs:
         # Account for the trailing newline that separates paragraphs in the
         # document's plain-text representation.
         offsets.append(offsets[-1] + len(para) + 1)
 
-    items: List[Dict[str, str]] = []
+    items: list[dict[str, str]] = []
     for start, end in changed_ranges:
         start_offset = offsets[start]
         para_slice = paragraphs[start : end + 1]
@@ -96,10 +102,12 @@ def process_changed_ranges(
 
 
 def _hash(suggestion: str, quote: str) -> str:
+    """Return a short hash used to identify duplicate suggestions."""
+
     return hashlib.sha1(f"{suggestion}|{quote}".encode()).hexdigest()[:8]
 
 
-def _prune_hashes(hashes: List[str], max_bytes: int = 124) -> str:
+def _prune_hashes(hashes: list[str], max_bytes: int = 124) -> str:
     """Join ``hashes`` ensuring result is <= ``max_bytes`` bytes.
 
     Oldest hashes (at the start of ``hashes``) are dropped first if the
@@ -126,10 +134,10 @@ def _prune_hashes(hashes: List[str], max_bytes: int = 124) -> str:
 
 
 def deduplicate_suggestions(
-    items: List[Dict[str, str]], existing_hashes: Set[str]
-) -> List[Dict[str, str]]:
+    items: list[dict[str, str]], existing_hashes: set[str]
+) -> list[dict[str, str]]:
     """Remove suggestions already represented by ``existing_hashes``."""
-    unique: List[Dict[str, str]] = []
+    unique: list[dict[str, str]] = []
     for item in items:
         if not item.get("suggestion"):
             continue
@@ -147,15 +155,15 @@ def review_document(
     drive_service: Any,
     docs_service: Any,
     document_id: str,
-    suggest_fn: Callable[[str, str], Dict[str, Any]],
-) -> List[Dict[str, str]]:
+    suggest_fn: Callable[[str, str], dict[str, Any]],
+) -> list[dict[str, str]]:
     """End-to-end review pipeline for a single document."""
     app_properties, head_revision = get_app_properties(drive_service, document_id)
     last_revision = app_properties.get("lastReviewedRevisionId")
     context = get_share_message(drive_service, document_id)
 
     current_paragraphs = get_document_paragraphs(docs_service, document_id)
-    old_paragraphs: List[str] = []
+    old_paragraphs: list[str] = []
     if last_revision:
         old_text = download_revision_text(drive_service, document_id, last_revision)
         old_paragraphs = old_text.splitlines()
@@ -165,8 +173,8 @@ def review_document(
         current_paragraphs, changed, suggest_fn, context=context
     )
 
-    existing_list: List[str] = []
-    existing_set: Set[str] = set()
+    existing_list: list[str] = []
+    existing_set: set[str] = set()
     if app_properties.get(SUGGESTION_HASHES_KEY):
         existing_list = app_properties[SUGGESTION_HASHES_KEY].split(",")
         existing_set = set(existing_list)
@@ -187,7 +195,7 @@ def review_document(
 def post_comments(
     drive_service: Any,
     document_id: str,
-    items: List[Dict[str, str]],
+    items: list[dict[str, str]],
 ) -> None:
     """Post review items as comments on the document.
 
@@ -200,9 +208,9 @@ def post_comments(
 
     MAX_BYTES = 4096
 
-    def _chunk_content(text: str) -> List[str]:
+    def _chunk_content(text: str) -> list[str]:
         """Split ``text`` into <= ``MAX_BYTES`` byte chunks."""
-        chunks: List[str] = []
+        chunks: list[str] = []
         encoded = text.encode("utf-8")
         while encoded:
             piece = encoded[:MAX_BYTES]
@@ -214,7 +222,7 @@ def post_comments(
     document_text = download_revision_text(drive_service, document_id, "head")
 
     for item in items:
-        lines: List[str] = []
+        lines: list[str] = []
         issue = item.get("issue")
         if issue:
             lines.append(issue)

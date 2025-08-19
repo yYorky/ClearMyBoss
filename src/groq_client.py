@@ -1,7 +1,7 @@
 """Simple Groq API client for text review suggestions."""
 from __future__ import annotations
 
-from typing import Any, Dict, Iterable
+from typing import Any, Iterable
 
 import logging
 import time
@@ -119,7 +119,7 @@ def get_suggestions(
     retries: int = 3,
     backoff: float = 1.0,
     halt_on_429: bool = True,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Fetch grammar suggestions from Groq.
 
     Large texts are split into ``CHUNK_SIZE`` pieces to keep each request
@@ -132,7 +132,7 @@ def get_suggestions(
         "Content-Type": "application/json",
     }
 
-    def _post(prompt: str) -> Dict[str, Any]:
+    def _post(prompt: str) -> dict[str, Any]:
         payload = {
             "model": "llama-3.1-8b-instant",
             "messages": [

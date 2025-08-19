@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List, Dict, Any
+from typing import Any
 
 from .google_service import build_service
 from .time_utils import parse_google_timestamp
@@ -17,7 +17,7 @@ def build_drive_service() -> Any:
     return build_service("drive", "v3", SCOPES)
 
 
-def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]:
+def list_recent_docs(service: Any, since_time: datetime) -> list[dict[str, Any]]:
     """Return Google Docs modified or shared after ``since_time``.
 
     The Drive API does not support filtering by ``sharedWithMeTime`` in the
@@ -50,7 +50,7 @@ def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]
         .execute()
     )
     files = results.get("files", [])
-    recent_files: List[Dict[str, Any]] = []
+    recent_files: list[dict[str, Any]] = []
     for f in files:
         for key in ("modifiedTime", "sharedWithMeTime"):
             ts = f.get(key)
@@ -66,7 +66,7 @@ def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]
     return recent_files
 
 
-def get_app_properties(service: Any, file_id: str) -> tuple[Dict[str, str], str]:
+def get_app_properties(service: Any, file_id: str) -> tuple[dict[str, str], str]:
     """Return ``appProperties`` and ``headRevisionId`` for ``file_id``."""
     result = (
         service.files()
@@ -77,7 +77,7 @@ def get_app_properties(service: Any, file_id: str) -> tuple[Dict[str, str], str]
 
 
 def update_app_properties(
-    service: Any, file_id: str, app_properties: Dict[str, str]
+    service: Any, file_id: str, app_properties: dict[str, str]
 ) -> None:
     """Update ``appProperties`` for ``file_id``."""
     service.files().update(
@@ -112,11 +112,11 @@ def create_comment(
     file_id: str,
     content: str,
     revision_id: str = "head",
-    regions: List[dict] | None = None,
-) -> Dict[str, str]:
+    regions: list[dict] | None = None,
+) -> dict[str, str]:
     """Create a comment on ``file_id`` optionally anchored to a text range."""
-    body: Dict[str, Any] = {"content": content}
-    anchor_dict: Dict[str, Any] = {"r": revision_id}
+    body: dict[str, Any] = {"content": content}
+    anchor_dict: dict[str, Any] = {"r": revision_id}
     if regions is not None:
         anchor_dict["a"] = regions
     body["anchor"] = json.dumps(anchor_dict)
@@ -139,7 +139,7 @@ def reply_to_comment(
     )
 
 
-def list_comments(service: Any, file_id: str) -> List[Dict[str, Any]]:
+def list_comments(service: Any, file_id: str) -> list[dict[str, Any]]:
     """Return top-level comments for ``file_id``."""
     result = (
         service.comments()
@@ -149,7 +149,7 @@ def list_comments(service: Any, file_id: str) -> List[Dict[str, Any]]:
     return result.get("comments", [])
 
 
-def list_replies(service: Any, file_id: str, comment_id: str) -> List[Dict[str, Any]]:
+def list_replies(service: Any, file_id: str, comment_id: str) -> list[dict[str, Any]]:
     """Return replies for a given comment."""
     result = (
         service.replies()
