@@ -2,13 +2,9 @@
 from __future__ import annotations
 
 from datetime import datetime
-import os
 from typing import List, Dict, Any
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-
-from config import settings
+from .google_service import build_service
 
 import json
 
@@ -16,31 +12,8 @@ SCOPES = ["https://www.googleapis.com/auth/drive"]
 
 
 def build_drive_service() -> Any:
-    """Build an authenticated Drive API service using service account credentials.
-
-    Raises
-    ------
-    ValueError
-        If ``GOOGLE_SERVICE_ACCOUNT_JSON`` is not set in the environment.
-    FileNotFoundError
-        If the path specified by ``GOOGLE_SERVICE_ACCOUNT_JSON`` does not exist.
-    """
-
-    cred_path = settings.GOOGLE_SERVICE_ACCOUNT_JSON
-    if not cred_path:
-        raise ValueError(
-            "GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set."
-        )
-    if not os.path.exists(cred_path):
-        raise FileNotFoundError(
-            f"Service account JSON file not found at {cred_path}"
-        )
-
-    creds = service_account.Credentials.from_service_account_file(
-        cred_path, scopes=SCOPES
-    )
-    service = build("drive", "v3", credentials=creds)
-    return service
+    """Build an authenticated Drive API service."""
+    return build_service("drive", "v3", SCOPES)
 
 
 def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]:
