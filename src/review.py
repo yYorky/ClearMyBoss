@@ -9,7 +9,9 @@ from __future__ import annotations
 from typing import Any, Callable
 import hashlib
 import logging
+import time
 from difflib import SequenceMatcher
+from googleapiclient.errors import HttpError
 
 from .google_docs import chunk_paragraphs, get_document_paragraphs
 from .google_drive import (
@@ -164,6 +166,40 @@ def deduplicate_suggestions(
     return unique
 
 
+def _retry_with_backoff(
+    fn: Callable[..., Any],
+    *args: Any,
+    max_attempts: int = 5,
+    base_delay: float = 1.0,
+    **kwargs: Any,
+) -> Any:
+    """Call ``fn`` retrying on 429 or 5xx ``HttpError`` responses.
+
+    Uses exponential backoff with ``base_delay`` seconds and up to
+    ``max_attempts`` attempts. Raises the last exception if all retries
+    fail.
+    """
+
+    for attempt in range(max_attempts):
+        try:
+            return fn(*args, **kwargs)
+        except HttpError as exc:  # pragma: no cover - network errors hard to simulate
+            status = int(getattr(getattr(exc, "resp", None), "status", 0))
+            retryable = status == 429 or 500 <= status < 600
+            if retryable and attempt < max_attempts - 1:
+                delay = base_delay * (2**attempt)
+                logging.warning(
+                    "Retrying %s due to HTTP %s (attempt %d/%d)",
+                    fn.__name__,
+                    status,
+                    attempt + 1,
+                    max_attempts,
+                )
+                time.sleep(delay)
+                continue
+            raise
+
+
 def review_document(
     drive_service: Any,
     docs_service: Any,
@@ -241,7 +277,8 @@ def post_comments(
             line_count = end_line - start_line + 1
             regions = [{"line": {"n": start_line, "l": line_count}}]
         try:
-            comment = create_comment(
+            comment = _retry_with_backoff(
+                create_comment,
                 drive_service,
                 document_id,
                 parts[0],
@@ -254,7 +291,13 @@ def post_comments(
         # Post remaining parts as replies
         for part in parts[1:]:
             try:
-                reply_to_comment(drive_service, document_id, comment["id"], part)
+                _retry_with_backoff(
+                    reply_to_comment,
+                    drive_service,
+                    document_id,
+                    comment["id"],
+                    part,
+                )
             except Exception:
                 logging.exception(
                     "Failed to reply to comment %s for %s",
