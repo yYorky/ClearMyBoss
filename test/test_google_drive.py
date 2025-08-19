@@ -190,9 +190,12 @@ def test_create_comment_calls_api(monkeypatch):
     service = MagicMock()
     service.comments.return_value.create.return_value.execute.return_value = {"id": "c1"}
     anchor = {"segmentId": "", "startIndex": 1, "endIndex": 3}
-    result = create_comment(service, "doc", "hello", anchor)
+    result = create_comment(service, "doc", "hello", regions=[anchor])
     assert result == {"id": "c1"}
-    body = {"content": "hello", "anchor": json.dumps({"r": anchor})}
+    body = {
+        "content": "hello",
+        "anchor": json.dumps({"r": "head", "a": [anchor]}),
+    }
     service.comments.return_value.create.assert_called_once_with(
         fileId="doc", body=body, fields="id"
     )
