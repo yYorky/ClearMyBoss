@@ -112,6 +112,102 @@ class RateLimiter:
 
 rate_limiter = RateLimiter(settings.GROQ_REQUESTS_PER_MINUTE)
 
+
+def _post_with_retry(
+    prompt: str,
+    headers: dict[str, str],
+    retries: int,
+    backoff: float,
+) -> dict[str, Any]:
+    """Send a POST request to Groq with retry handling.
+
+    Mirrors the previous inline ``_post`` logic from ``get_suggestions`` and
+    maintains the same error-handling semantics for 429 and 5xx responses.
+    """
+
+    payload = {
+        "model": "llama-3.1-8b-instant",
+        "messages": [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": prompt},
+        ],
+        "temperature": 0.2,
+        "max_tokens": 800,
+    }
+
+    last_exc: RequestException | None = None
+    _backoff = backoff
+    for attempt in range(1, retries + 1):
+        try:
+            rate_limiter.acquire()
+            resp = requests.post(
+                GROQ_API_URL, json=payload, headers=headers, timeout=30
+            )
+            if resp.status_code >= 400:
+                try:
+                    detail = resp.json()
+                except Exception:
+                    detail = {"text": resp.text}
+                resp.raise_for_status()
+            return resp.json()
+
+        except HTTPError as exc:
+            status = exc.response.status_code if exc.response else None
+            try:
+                err_body = exc.response.json()
+            except Exception:
+                err_body = {"text": getattr(exc.response, "text", "")}
+            if status == 429 and attempt < retries:
+                retry_after = (
+                    exc.response.headers.get("Retry-After")
+                    if exc.response
+                    else None
+                )
+                try:
+                    wait = float(retry_after)
+                except (TypeError, ValueError):
+                    wait = _backoff
+                rate_limiter.reduce_rate(wait)
+                jitter = random.uniform(0, wait / 2)
+                logger.warning(
+                    "Groq rate limited (429). Retrying in %.2f seconds (attempt %s/%s)",
+                    wait + jitter,
+                    attempt,
+                    retries,
+                )
+                time.sleep(wait + jitter)
+                _backoff *= 2
+            elif status and 500 <= status < 600 and attempt < retries:
+                jitter = random.uniform(0, _backoff / 2)
+                logger.warning(
+                    "Groq HTTP %s. Retrying in %.2f seconds (attempt %s/%s)",
+                    status,
+                    _backoff + jitter,
+                    attempt,
+                    retries,
+                )
+                time.sleep(_backoff + jitter)
+                _backoff *= 2
+            else:
+                raise
+
+        except RequestException as exc:
+            last_exc = exc
+            if attempt < retries:
+                jitter = random.uniform(0, _backoff / 2)
+                logger.warning(
+                    "Request error %s. Retrying in %.2f seconds (attempt %s/%s)",
+                    exc,
+                    _backoff + jitter,
+                    attempt,
+                    retries,
+                )
+                time.sleep(_backoff + jitter)
+                _backoff *= 2
+            else:
+                raise last_exc
+
+
 def get_suggestions(
     text: str,
     prompt_template: str = PROMPT_TEMPLATE,
@@ -132,101 +228,22 @@ def get_suggestions(
         "Content-Type": "application/json",
     }
 
-    def _post(prompt: str) -> dict[str, Any]:
-        payload = {
-            "model": "llama-3.1-8b-instant",
-            "messages": [
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt},
-            ],
-            "temperature": 0.2,
-            "max_tokens": 800,
-        }
-
-        last_exc = None
-        _backoff = backoff
-        for attempt in range(1, retries + 1):
-            try:
-                rate_limiter.acquire()
-                resp = requests.post(
-                    GROQ_API_URL, json=payload, headers=headers, timeout=30
-                )
-                if resp.status_code >= 400:
-                    try:
-                        detail = resp.json()
-                    except Exception:
-                        detail = {"text": resp.text}
-                    resp.raise_for_status()
-                return resp.json()
-
-            except HTTPError as exc:
-                status = exc.response.status_code if exc.response else None
-                try:
-                    err_body = exc.response.json()
-                except Exception:
-                    err_body = {"text": getattr(exc.response, "text", "")}
-                if status == 429 and attempt < retries:
-                    retry_after = (
-                        exc.response.headers.get("Retry-After")
-                        if exc.response
-                        else None
-                    )
-                    try:
-                        wait = float(retry_after)
-                    except (TypeError, ValueError):
-                        wait = _backoff
-                    rate_limiter.reduce_rate(wait)
-                    jitter = random.uniform(0, wait / 2)
-                    logger.warning(
-                        "Groq rate limited (429). Retrying in %.2f seconds (attempt %s/%s)",
-                        wait + jitter,
-                        attempt,
-                        retries,
-                    )
-                    time.sleep(wait + jitter)
-                    _backoff *= 2
-                elif status and 500 <= status < 600 and attempt < retries:
-                    jitter = random.uniform(0, _backoff / 2)
-                    logger.warning(
-                        "Groq HTTP %s. Retrying in %.2f seconds (attempt %s/%s)",
-                        status,
-                        _backoff + jitter,
-                        attempt,
-                        retries,
-                    )
-                    time.sleep(_backoff + jitter)
-                    _backoff *= 2
-                else:
-                    raise
-
-            except RequestException as exc:
-                last_exc = exc
-                if attempt < retries:
-                    jitter = random.uniform(0, _backoff / 2)
-                    logger.warning(
-                        "Request error %s. Retrying in %.2f seconds (attempt %s/%s)",
-                        exc,
-                        _backoff + jitter,
-                        attempt,
-                        retries,
-                    )
-                    time.sleep(_backoff + jitter)
-                    _backoff *= 2
-                else:
-                    raise last_exc
-
     def _chunks(txt: str, size: int) -> Iterable[str]:
         for i in range(0, len(txt), size):
             yield txt[i : i + size]
 
     if len(text) <= CHUNK_SIZE:
-        return _post(prompt_template.format(text=text))
+        return _post_with_retry(
+            prompt_template.format(text=text), headers, retries, backoff
+        )
 
     responses = []
     for part in _chunks(text, CHUNK_SIZE):
         prompt = prompt_template.format(text=part)
         try:
-            responses.append(_post(prompt))
+            responses.append(
+                _post_with_retry(prompt, headers, retries, backoff)
+            )
         except HTTPError as exc:
             status = exc.response.status_code if exc.response else None
             if status == 429 and halt_on_429:
