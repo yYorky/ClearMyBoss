@@ -186,15 +186,14 @@ def test_build_drive_service_missing_credentials(monkeypatch):
     with pytest.raises(ValueError):
         build_drive_service()
 
-def test_create_comment_calls_api(monkeypatch):
+def test_create_comment_calls_api(region):
     service = MagicMock()
     service.comments.return_value.create.return_value.execute.return_value = {"id": "c1"}
-    anchor = {"segmentId": "", "startIndex": 1, "endIndex": 3}
-    result = create_comment(service, "doc", "hello", regions=[anchor])
+    result = create_comment(service, "doc", "hello", regions=[region])
     assert result == {"id": "c1"}
     body = {
         "content": "hello",
-        "anchor": json.dumps({"r": "head", "a": [anchor]}),
+        "anchor": json.dumps({"r": "head", "a": [region]}),
     }
     service.comments.return_value.create.assert_called_once_with(
         fileId="doc", body=body, fields="id"
