@@ -181,7 +181,7 @@ def test_filter_user_comments_skips_ai_threads():
 def test_build_drive_service_missing_credentials(monkeypatch):
     """Should raise a clear error when credential path is not configured."""
     monkeypatch.setattr(
-        "src.google_drive.settings.GOOGLE_SERVICE_ACCOUNT_JSON", None
+        "src.google_service.settings.GOOGLE_SERVICE_ACCOUNT_JSON", None
     )
     with pytest.raises(ValueError):
         build_drive_service()

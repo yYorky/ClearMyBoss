@@ -3,20 +3,13 @@ from __future__ import annotations
 
 from typing import List, Any
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
-
-from config import settings
+from .google_service import build_service
 
 SCOPES = ["https://www.googleapis.com/auth/documents.readonly"]
 
 
 def build_docs_service() -> Any:
-    creds = service_account.Credentials.from_service_account_file(
-        settings.GOOGLE_SERVICE_ACCOUNT_JSON, scopes=SCOPES
-    )
-    service = build("docs", "v1", credentials=creds)
-    return service
+    return build_service("docs", "v1", SCOPES)
 
 
 def get_document_paragraphs(service: Any, document_id: str) -> List[str]:
