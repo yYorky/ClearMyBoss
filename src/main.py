@@ -54,6 +54,71 @@ def groq_suggest(text: str, context: str) -> dict[str, str]:
         return {"issue": "", "suggestion": "", "severity": "info"}
 
 
+def _process_document(
+    drive_service: Any, docs_service: Any, file: dict[str, Any]
+) -> bool:
+    """Review a single document and post comments.
+
+    Parameters
+    ----------
+    drive_service, docs_service
+        Authenticated Google Drive and Docs service instances.
+    file
+        File metadata dictionary returned from :func:`list_recent_docs`.
+
+    Returns
+    -------
+    bool
+        ``True`` if the document was processed successfully, ``False`` otherwise.
+    """
+
+    doc_id = file["id"]
+    doc_name = file.get("name", "Unknown Document")
+    logger.info("Processing document: '%s' (ID: %s)", doc_name, doc_id)
+
+    try:
+        items = review_document(drive_service, docs_service, doc_id, groq_suggest)
+        logger.info(
+            "Generated %d review items for document '%s'", len(items), doc_name
+        )
+
+        if items:
+            post_comments(drive_service, doc_id, items)
+            logger.info(
+                "Posted %d comments to document '%s'", len(items), doc_name
+            )
+        else:
+            logger.info("No comments to post for document '%s'", doc_name)
+
+        return True
+    except Exception as e:  # pragma: no cover - logging path
+        logger.error(
+            "Error processing document '%s' (ID: %s): %s", doc_name, doc_id, e
+        )
+        return False
+
+
+def _latest_timestamp(file: dict[str, Any], current: datetime) -> datetime:
+    """Return the latest relevant timestamp for ``file``.
+
+    Considers both ``modifiedTime`` and ``sharedWithMeTime`` and returns the
+    newer one, falling back to ``current`` when parsing fails or timestamps are
+    missing.
+    """
+
+    for key in ("modifiedTime", "sharedWithMeTime"):
+        ts = file.get(key)
+        if not ts:
+            continue
+        try:
+            dt = parse_google_timestamp(ts)
+        except ValueError:
+            continue
+        if dt > current:
+            current = dt
+    return current
+
+
 def run_once(
     drive_service: Any, docs_service: Any, since: datetime
 ) -> datetime:
@@ -67,61 +132,25 @@ def run_once(
         "Starting document review cycle. Checking for documents changed since: %s", since
     )
 
-    files: list[dict[str, Any]] = []
     try:
         files = list_recent_docs(drive_service, since)
         logger.info("Found %d documents to process", len(files))
-
-        processed_count = 0
-        for f in files:
-            doc_id = f["id"]
-            doc_name = f.get("name", "Unknown Document")
-            logger.info("Processing document: '%s' (ID: %s)", doc_name, doc_id)
-
-            try:
-                items = review_document(
-                    drive_service, docs_service, doc_id, groq_suggest
-                )
-                logger.info(
-                    "Generated %d review items for document '%s'", len(items), doc_name
-                )
-
-                if items:
-                    post_comments(drive_service, doc_id, items)
-                    logger.info(
-                        "Posted %d comments to document '%s'", len(items), doc_name
-                    )
-                else:
-                    logger.info("No comments to post for document '%s'", doc_name)
-
-                processed_count += 1
-
-            except Exception as e:
-                logger.error(
-                    "Error processing document '%s' (ID: %s): %s", doc_name, doc_id, e
-                )
-                continue
-
-        logger.info(
-            "Completed review cycle. Successfully processed %d/%d documents",
-            processed_count,
-            len(files),
-        )
-
     except Exception as e:  # pragma: no cover - logging path
         logger.error(f"Error during document review cycle: {e}")
+        files = []
 
+    processed_count = 0
     latest_time = since
     for f in files:
-        for key in ("modifiedTime", "sharedWithMeTime"):
-            ts = f.get(key)
-            if ts:
-                try:
-                    dt = parse_google_timestamp(ts)
-                except ValueError:
-                    continue
-                if dt > latest_time:
-                    latest_time = dt
+        latest_time = _latest_timestamp(f, latest_time)
+        if _process_document(drive_service, docs_service, f):
+            processed_count += 1
+
+    logger.info(
+        "Completed review cycle. Successfully processed %d/%d documents",
+        processed_count,
+        len(files),
+    )
 
     new_timestamp = max(latest_time, datetime.utcnow())
     logger.info(
