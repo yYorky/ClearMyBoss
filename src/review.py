@@ -22,18 +22,6 @@ MAX_APP_PROPERTY_BYTES = 124
 SUGGESTION_HASHES_KEY = "suggestionHashes"
 
 
-def get_last_reviewed_revision(app_properties: Dict[str, str]) -> str | None:
-    """Return stored ``lastReviewedRevisionId`` if present."""
-    return app_properties.get("lastReviewedRevisionId")
-
-
-def update_last_reviewed_revision(
-    app_properties: Dict[str, str], revision_id: str
-) -> None:
-    """Update ``lastReviewedRevisionId`` in ``app_properties``."""
-    app_properties["lastReviewedRevisionId"] = revision_id
-
-
 def detect_changed_ranges(
     old_paragraphs: List[str], new_paragraphs: List[str]
 ) -> List[Tuple[int, int]]:
@@ -163,7 +151,7 @@ def review_document(
 ) -> List[Dict[str, str]]:
     """End-to-end review pipeline for a single document."""
     app_properties, head_revision = get_app_properties(drive_service, document_id)
-    last_revision = get_last_reviewed_revision(app_properties)
+    last_revision = app_properties.get("lastReviewedRevisionId")
     context = get_share_message(drive_service, document_id)
 
     current_paragraphs = get_document_paragraphs(docs_service, document_id)
@@ -190,7 +178,7 @@ def review_document(
     app_properties[SUGGESTION_HASHES_KEY] = _prune_hashes(
         existing_list, max_bytes=available_bytes
     )
-    update_last_reviewed_revision(app_properties, head_revision)
+    app_properties["lastReviewedRevisionId"] = head_revision
     update_app_properties(drive_service, document_id, app_properties)
 
     return unique
