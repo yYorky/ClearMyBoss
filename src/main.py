@@ -9,6 +9,7 @@ from typing import Any
 from .google_drive import build_drive_service, list_recent_docs
 from .google_docs import build_docs_service
 from .groq_client import get_suggestions
+from .time_utils import parse_google_timestamp
 from requests import HTTPError
 from .review import review_document, post_comments
 
@@ -116,7 +117,7 @@ def run_once(
             ts = f.get(key)
             if ts:
                 try:
-                    dt = datetime.strptime(ts, "%Y-%m-%dT%H:%M:%SZ")
+                    dt = parse_google_timestamp(ts)
                 except ValueError:
                     continue
                 if dt > latest_time:
