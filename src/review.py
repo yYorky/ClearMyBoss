@@ -238,7 +238,10 @@ def post_comments(
         if start is not None and end is not None:
             anchor = {"segmentId": "", "startIndex": start, "endIndex": end}
         comment = create_comment(
-            drive_service, document_id, parts[0], anchor
+            drive_service,
+            document_id,
+            parts[0],
+            regions=[anchor] if anchor else None,
         )
         # Post remaining parts as replies
         for part in parts[1:]:

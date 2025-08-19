@@ -191,8 +191,8 @@ def test_post_comments_calls_create(monkeypatch):
     create_calls = []
     reply_calls = []
 
-    def fake_create(service, file_id, content, anchor):
-        create_calls.append((file_id, content, anchor))
+    def fake_create(service, file_id, content, revision_id="head", regions=None):
+        create_calls.append((file_id, content, revision_id, regions))
         return {"id": "c1"}
 
     def fake_reply(service, file_id, comment_id, content):
@@ -211,7 +211,7 @@ def test_post_comments_calls_create(monkeypatch):
     ]
     post_comments("drive", "doc1", items)
     expected_anchor = {"segmentId": "", "startIndex": 1, "endIndex": 3}
-    assert create_calls == [("doc1", "Fix typo", expected_anchor)]
+    assert create_calls == [("doc1", "Fix typo", "head", [expected_anchor])]
     assert reply_calls == []
 
 
@@ -219,8 +219,8 @@ def test_post_comments_splits_long_comments(monkeypatch):
     create_calls = []
     reply_calls = []
 
-    def fake_create(service, file_id, content, anchor):
-        create_calls.append((file_id, content, anchor))
+    def fake_create(service, file_id, content, revision_id="head", regions=None):
+        create_calls.append((file_id, content, revision_id, regions))
         return {"id": "c1"}
 
     def fake_reply(service, file_id, comment_id, content):
@@ -248,7 +248,7 @@ def test_post_comments_splits_long_comments(monkeypatch):
     assert len(create_calls[0][1].encode("utf-8")) <= 4096
     assert len(reply_calls[0][2].encode("utf-8")) <= 4096
     expected_anchor = {"segmentId": "", "startIndex": 0, "endIndex": 1}
-    assert create_calls[0][2] == expected_anchor
+    assert create_calls[0][3] == [expected_anchor]
 
 
 def test_suggestion_hashes_property_total_size_limit():

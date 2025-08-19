@@ -139,12 +139,15 @@ def create_comment(
     service: Any,
     file_id: str,
     content: str,
-    anchor: Dict[str, Any] | None = None,
+    revision_id: str = "head",
+    regions: List[dict] | None = None,
 ) -> Dict[str, str]:
     """Create a comment on ``file_id`` optionally anchored to a text range."""
     body: Dict[str, Any] = {"content": content}
-    if anchor is not None:
-        body["anchor"] = json.dumps({"r": anchor})
+    anchor_dict: Dict[str, Any] = {"r": revision_id}
+    if regions is not None:
+        anchor_dict["a"] = regions
+    body["anchor"] = json.dumps(anchor_dict)
     return (
         service.comments()
         .create(fileId=file_id, body=body, fields="id")
