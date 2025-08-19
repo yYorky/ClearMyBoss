@@ -118,6 +118,17 @@ def test_download_revision_text_decodes_bytes():
     assert text == "hello"
 
 
+def test_download_revision_head_uses_files_export():
+    service = MagicMock()
+    service.files.return_value.export.return_value.execute.return_value = b"hi"
+    text = download_revision_text(service, "f", "head")
+    assert text == "hi"
+    service.files.return_value.export.assert_called_once_with(
+        fileId="f", mimeType="text/plain"
+    )
+    service.revisions.return_value.get.assert_not_called()
+
+
 def test_get_share_message_fetches_description():
     service = MagicMock()
     service.files.return_value.get.return_value.execute.return_value = {
