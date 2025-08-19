@@ -20,11 +20,6 @@ logger = logging.getLogger(__name__)
 # `/chat/completions` route rather than the legacy `/completions` path.
 GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Prompt sent with each request
-# PROMPT_TEMPLATE = (
-#     "Review the following text and provide suggestions for improvement. "
-#     "Feel free to ask clarifying questions or offer broader comments beyond grammar. "
-#     "Respond in one or two short sentences in plain language.\n\n{text}"
-# )
 PROMPT_TEMPLATE = (
     "Review the following text and provide a quick comment as if tagging it inside the doc. "
     "Feel free to ask clarifying questions. "
@@ -34,11 +29,6 @@ PROMPT_TEMPLATE = (
 
 
 # System instruction to keep the model's feedback brief and relevant
-# SYSTEM_PROMPT = (
-#     "You are a no-nonsense boss reviewing your employee's work. "
-#     "Provide direct, actionable feedback or clarifying questions in casual, plain language. "
-#     "You may comment on broader issues beyond grammar. Keep feedback to one or two short sentences."
-# )
 SYSTEM_PROMPT = (
     "You are a sharp, no-nonsense boss reviewing a document directly in writing. "
     "Speak like you're leaving a quick comment inside the doc, pointing to the exact words, sentence, or section. "
