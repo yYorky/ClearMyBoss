@@ -222,6 +222,8 @@ def post_comments(
             chunks.append(chunk)
             encoded = encoded[len(chunk.encode("utf-8")) :]
         return chunks
+    # Retrieve plain text of the latest revision so we can derive line numbers
+    document_text = download_revision_text(drive_service, document_id, "head")
 
     for item in items:
         lines: List[str] = []
@@ -234,14 +236,18 @@ def post_comments(
         # Post the first part anchored to the text range
         start = item.get("start_index")
         end = item.get("end_index")
-        anchor = None
+        regions = None
         if start is not None and end is not None:
-            anchor = {"segmentId": "", "startIndex": start, "endIndex": end}
+            start_line = document_text.count("\n", 0, start) + 1
+            end_line = document_text.count("\n", 0, max(end - 1, 0)) + 1
+            line_count = end_line - start_line + 1
+            regions = [{"line": {"n": start_line, "l": line_count}}]
         comment = create_comment(
             drive_service,
             document_id,
             parts[0],
-            regions=[anchor] if anchor else None,
+            revision_id="head",
+            regions=regions,
         )
         # Post remaining parts as replies
         for part in parts[1:]:
