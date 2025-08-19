@@ -87,14 +87,23 @@ def update_app_properties(
 
 def download_revision_text(service: Any, file_id: str, revision_id: str) -> str:
     """Download revision content as plain text."""
-    content = (
-        service.revisions()
-        .get(fileId=file_id, revisionId=revision_id, alt="media")
-        .execute(num_retries=3)
-    )
+    if revision_id == "head":
+        content = (
+            service.files()
+            .export(fileId=file_id, mimeType="text/plain")
+            .execute(num_retries=3)
+        )
+    else:
+        content = (
+            service.revisions()
+            .get(fileId=file_id, revisionId=revision_id, alt="media")
+            .execute(num_retries=3)
+        )
     if isinstance(content, bytes):
         return content.decode()
-    return content
+    if isinstance(content, str):
+        return content
+    return str(content)
 
 
 def get_share_message(service: Any, file_id: str) -> str:
