@@ -187,7 +187,7 @@ def test_review_document_ignores_empty_suggestions():
     assert update_body["appProperties"]["suggestionHashes"] == "abcd"
 
 
-def test_post_comments_calls_create(monkeypatch):
+def test_post_comments_calls_create(monkeypatch, region):
     create_calls = []
     reply_calls = []
 
@@ -213,12 +213,11 @@ def test_post_comments_calls_create(monkeypatch):
         }
     ]
     post_comments("drive", "doc1", items)
-    expected_region = {"line": {"n": 1, "l": 1}}
-    assert create_calls == [("doc1", "Fix typo", "head", [expected_region])]
+    assert create_calls == [("doc1", "Fix typo", "head", [region])]
     assert reply_calls == []
 
 
-def test_post_comments_splits_long_comments(monkeypatch):
+def test_post_comments_splits_long_comments(monkeypatch, region):
     create_calls = []
     reply_calls = []
 
@@ -253,8 +252,7 @@ def test_post_comments_splits_long_comments(monkeypatch):
     # Ensure the created comment respects size limit
     assert len(create_calls[0][1].encode("utf-8")) <= 4096
     assert len(reply_calls[0][2].encode("utf-8")) <= 4096
-    expected_region = {"line": {"n": 1, "l": 1}}
-    assert create_calls[0][3] == [expected_region]
+    assert create_calls[0][3] == [region]
 
 
 def test_suggestion_hashes_property_total_size_limit():
