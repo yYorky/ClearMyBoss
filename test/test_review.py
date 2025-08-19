@@ -200,6 +200,9 @@ def test_post_comments_calls_create(monkeypatch):
 
     monkeypatch.setattr("src.review.create_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
+    monkeypatch.setattr(
+        "src.review.download_revision_text", lambda *_args, **_kwargs: "abc\n"
+    )
     items = [
         {
             "suggestion": "Fix typo",
@@ -210,8 +213,8 @@ def test_post_comments_calls_create(monkeypatch):
         }
     ]
     post_comments("drive", "doc1", items)
-    expected_anchor = {"segmentId": "", "startIndex": 1, "endIndex": 3}
-    assert create_calls == [("doc1", "Fix typo", "head", [expected_anchor])]
+    expected_region = {"line": {"n": 1, "l": 1}}
+    assert create_calls == [("doc1", "Fix typo", "head", [expected_region])]
     assert reply_calls == []
 
 
@@ -228,6 +231,9 @@ def test_post_comments_splits_long_comments(monkeypatch):
 
     monkeypatch.setattr("src.review.create_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
+    monkeypatch.setattr(
+        "src.review.download_revision_text", lambda *_args, **_kwargs: "abc\n"
+    )
 
     long_text = "a" * 5000
     items = [
@@ -247,8 +253,8 @@ def test_post_comments_splits_long_comments(monkeypatch):
     # Ensure the created comment respects size limit
     assert len(create_calls[0][1].encode("utf-8")) <= 4096
     assert len(reply_calls[0][2].encode("utf-8")) <= 4096
-    expected_anchor = {"segmentId": "", "startIndex": 0, "endIndex": 1}
-    assert create_calls[0][3] == [expected_anchor]
+    expected_region = {"line": {"n": 1, "l": 1}}
+    assert create_calls[0][3] == [expected_region]
 
 
 def test_suggestion_hashes_property_total_size_limit():
