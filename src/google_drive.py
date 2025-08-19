@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import List, Dict, Any
 
 from .google_service import build_service
+from .time_utils import parse_google_timestamp
 
 import json
 
@@ -56,9 +57,7 @@ def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]
             if not ts:
                 continue
             try:
-                dt = datetime.fromisoformat(ts.replace("Z", "+00:00")).replace(
-                    tzinfo=None
-                )
+                dt = parse_google_timestamp(ts)
             except ValueError:
                 continue
             if dt > since_time:
