@@ -1,7 +1,7 @@
 """Google Docs API utilities."""
 from __future__ import annotations
 
-from typing import List, Any
+from typing import Any
 
 from .google_service import build_service
 
@@ -12,10 +12,10 @@ def build_docs_service() -> Any:
     return build_service("docs", "v1", SCOPES)
 
 
-def get_document_paragraphs(service: Any, document_id: str) -> List[str]:
+def get_document_paragraphs(service: Any, document_id: str) -> list[str]:
     """Fetch a document and return its paragraphs as a list of strings."""
     doc = service.documents().get(documentId=document_id).execute()
-    paragraphs: List[str] = []
+    paragraphs: list[str] = []
     for element in doc.get("body", {}).get("content", []):
         para = element.get("paragraph")
         if not para:
@@ -30,7 +30,7 @@ def get_document_paragraphs(service: Any, document_id: str) -> List[str]:
     return paragraphs
 
 
-def chunk_paragraphs(paragraphs: List[str], max_chars: int) -> List[str]:
+def chunk_paragraphs(paragraphs: list[str], max_chars: int) -> list[str]:
     """Chunk paragraphs into groups limited by ``max_chars`` characters.
 
     Paragraphs are concatenated using newline characters so that the returned
@@ -38,8 +38,8 @@ def chunk_paragraphs(paragraphs: List[str], max_chars: int) -> List[str]:
     includes these newline separators when computing the size of each chunk.
     """
 
-    chunks: List[str] = []
-    current: List[str] = []
+    chunks: list[str] = []
+    current: list[str] = []
     current_len = 0
     for para in paragraphs:
         # ``para_len`` accounts for a preceding newline when ``current`` already
