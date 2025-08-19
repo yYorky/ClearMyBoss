@@ -36,7 +36,7 @@ def list_recent_docs(service: Any, since_time: datetime) -> list[dict[str, Any]]
     iso_time = since_time.replace(microsecond=0).isoformat("T") + "Z"
     query = (
         "mimeType='application/vnd.google-apps.document' "
-        f"and (modifiedTime > '{iso_time}' or sharedWithMe = true)"
+        f"and (modifiedTime > '{iso_time}' or sharedWithMe)"
     )
 
     files: list[dict[str, Any]] = []
@@ -47,7 +47,7 @@ def list_recent_docs(service: Any, since_time: datetime) -> list[dict[str, Any]]
             "fields": "nextPageToken, files(id, name, modifiedTime, sharedWithMeTime)",
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
-            "corpora": "allDrives",
+            "corpora": "user",
             "pageSize": 1000,
         }
         if page_token:
