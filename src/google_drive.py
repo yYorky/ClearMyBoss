@@ -47,7 +47,7 @@ def list_recent_docs(service: Any, since_time: datetime) -> list[dict[str, Any]]
             includeItemsFromAllDrives=True,
             corpora="allDrives",
         )
-        .execute()
+        .execute(num_retries=3)
     )
     files = results.get("files", [])
     recent_files: list[dict[str, Any]] = []
@@ -71,7 +71,7 @@ def get_app_properties(service: Any, file_id: str) -> tuple[dict[str, str], str]
     result = (
         service.files()
         .get(fileId=file_id, fields="appProperties, headRevisionId")
-        .execute()
+        .execute(num_retries=3)
     )
     return result.get("appProperties", {}), result.get("headRevisionId", "")
 
@@ -82,7 +82,7 @@ def update_app_properties(
     """Update ``appProperties`` for ``file_id``."""
     service.files().update(
         fileId=file_id, body={"appProperties": app_properties}
-    ).execute()
+    ).execute(num_retries=3)
 
 
 def download_revision_text(service: Any, file_id: str, revision_id: str) -> str:
@@ -90,7 +90,7 @@ def download_revision_text(service: Any, file_id: str, revision_id: str) -> str:
     content = (
         service.revisions()
         .get(fileId=file_id, revisionId=revision_id, alt="media")
-        .execute()
+        .execute(num_retries=3)
     )
     if isinstance(content, bytes):
         return content.decode()
@@ -102,7 +102,7 @@ def get_share_message(service: Any, file_id: str) -> str:
     result = (
         service.files()
         .get(fileId=file_id, fields="description")
-        .execute()
+        .execute(num_retries=3)
     )
     return result.get("description", "")
 
@@ -123,7 +123,7 @@ def create_comment(
     return (
         service.comments()
         .create(fileId=file_id, body=body, fields="id")
-        .execute()
+        .execute(num_retries=3)
     )
 
 
@@ -135,7 +135,7 @@ def reply_to_comment(
     return (
         service.replies()
         .create(fileId=file_id, commentId=comment_id, body=body, fields="id")
-        .execute()
+        .execute(num_retries=3)
     )
 
 
@@ -144,7 +144,7 @@ def list_comments(service: Any, file_id: str) -> list[dict[str, Any]]:
     result = (
         service.comments()
         .list(fileId=file_id, fields="comments(id,author(displayName),content)")
-        .execute()
+        .execute(num_retries=3)
     )
     return result.get("comments", [])
 
@@ -158,6 +158,6 @@ def list_replies(service: Any, file_id: str, comment_id: str) -> list[dict[str, 
             commentId=comment_id,
             fields="replies(id,author(displayName),content)",
         )
-        .execute()
+        .execute(num_retries=3)
     )
     return result.get("replies", [])
