@@ -23,7 +23,7 @@ def test_get_suggestions_calls_api(monkeypatch):
 
         return Resp()
 
-    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("src.groq_client.session.post", fake_post)
     resp = get_suggestions("Some text")
     assert resp == {"choices": []}
     assert captured["url"] == GROQ_API_URL
@@ -60,7 +60,7 @@ def test_get_suggestions_retries_on_server_error(monkeypatch):
             return Resp(False)
         return Resp(True)
 
-    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("src.groq_client.session.post", fake_post)
     resp = get_suggestions("ok")
     assert resp == {"choices": []}
     assert calls["count"] == 2
@@ -72,7 +72,7 @@ def test_get_suggestions_raises_after_retries(monkeypatch):
 
         raise RequestException("boom")
 
-    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("src.groq_client.session.post", fake_post)
     with pytest.raises(Exception):
         get_suggestions("fail", retries=2, backoff=0)
 
@@ -103,7 +103,7 @@ def test_get_suggestions_chunks_large_text(monkeypatch):
 
         return Resp()
 
-    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("src.groq_client.session.post", fake_post)
     large_text = "x" * (CHUNK_SIZE * 2 + 10)
     resp = get_suggestions(large_text)
     assert calls["count"] == 3
@@ -133,7 +133,7 @@ def test_get_suggestions_retries_on_429(monkeypatch):
 
     sleeps: list[float] = []
 
-    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("src.groq_client.session.post", fake_post)
     monkeypatch.setattr("time.sleep", lambda s: sleeps.append(s))
     monkeypatch.setattr("random.uniform", lambda a, b: 0)
     monkeypatch.setattr("src.groq_client.rate_limiter.acquire", lambda: None)
@@ -291,7 +291,7 @@ def test_get_suggestions_halts_on_persistent_429(monkeypatch, caplog):
 
         return Resp()
 
-    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("src.groq_client.session.post", fake_post)
     monkeypatch.setattr("src.groq_client.rate_limiter.acquire", lambda: None)
 
     text = "x" * (CHUNK_SIZE * 2)
@@ -352,7 +352,7 @@ def test_spacing_prevents_429(monkeypatch):
 
     monkeypatch.setattr(gc.time, "time", fake_time)
     monkeypatch.setattr(gc.time, "sleep", fake_sleep)
-    monkeypatch.setattr("requests.post", fake_post)
+    monkeypatch.setattr("src.groq_client.session.post", fake_post)
     gc.rate_limiter = gc.RateLimiter(60)
 
     for _ in range(5):

@@ -9,11 +9,20 @@ import threading
 import random
 from collections import deque
 import requests
+from requests.adapters import HTTPAdapter
 from requests.exceptions import HTTPError, RequestException
+from urllib3.util.retry import Retry
 
 from config import settings
 
 logger = logging.getLogger(__name__)
+
+# Shared requests session with a basic retry strategy for transient errors
+session = requests.Session()
+_retry = Retry(total=3, backoff_factor=0.3, allowed_methods=["POST"])
+adapter = HTTPAdapter(max_retries=_retry)
+session.mount("https://", adapter)
+session.mount("http://", adapter)
 
 # Groq's OpenAI-compatible endpoint for chat completions
 # https://console.groq.com/docs shows that the API mirrors OpenAI's
@@ -140,7 +149,7 @@ def _post_with_retry(
     for attempt in range(1, retries + 1):
         try:
             rate_limiter.acquire()
-            resp = requests.post(
+            resp = session.post(
                 GROQ_API_URL, json=payload, headers=headers, timeout=30
             )
             if resp.status_code >= 400:
