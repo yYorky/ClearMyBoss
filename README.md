@@ -7,13 +7,19 @@
 ![License](https://img.shields.io/badge/license-MIT-lightgrey)
 ![Tests](https://img.shields.io/badge/tests-passing-brightgreen?logo=pytest)
 
-ClearMyBoss automatically reviews Google Docs and leaves concise, boss‑like comments powered by Groq's large language models.
+People often wonder if AI will replace white-collar workers, but what if it could replace our bosses instead? In many Singapore offices a staff member sends draft documents up the chain for review. ClearMyBoss explores that idea by letting an AI read your Google Doc and leave short, boss-style comments so you can tidy up your work before it reaches a human manager.
+
+### Why
+
+* Draft a report or proposal in Google Docs.
+* Share it with the service account before sending it to your boss.
+* Get quick, boss-style comments to tidy up your work early.
 
 ---
 
 ## 🎯 Objective
 
-Provide an autonomous **"boss" reviewer** that reviews documents shared with a service account and offers direct, helpful feedback without human involvement.
+Provide an autonomous **"boss" reviewer** that acts like your manager: it reviews documents shared with a service account and offers direct, helpful feedback without human involvement.
 
 ---
 
