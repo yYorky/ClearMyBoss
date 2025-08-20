@@ -1,7 +1,7 @@
 """Google Drive API utilities."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Any
 
 from .google_service import build_service
@@ -18,36 +18,45 @@ def build_drive_service() -> Any:
 
 
 def list_recent_docs(service: Any, since_time: datetime) -> list[dict[str, Any]]:
-    """Return Google Docs modified or shared after ``since_time``.
+    """Return Google Docs accessible to the service account, recently modified or accessed.
 
-    The Drive API does not support filtering by ``sharedWithMeTime`` in the
-    query, so we retrieve all documents either modified after the timestamp or
-    currently shared with the account and then filter the results locally.
+    For service accounts, the 'sharedWithMe' query parameter doesn't work as it does
+    for regular user accounts. Instead, we query all accessible Google Docs and 
+    filter by modification time, then separately query recently accessible documents
+    to catch newly shared ones.
 
     Parameters
     ----------
     service
         Authenticated Google Drive service instance.
     since_time
-        ``datetime`` of the last run. Documents with ``modifiedTime`` or
-        ``sharedWithMeTime`` after this timestamp are returned.
+        ``datetime`` of the last run. Documents with ``modifiedTime`` after this
+        timestamp or that are newly accessible are returned.
     """
 
     iso_time = since_time.replace(microsecond=0).isoformat("T") + "Z"
-    query = (
+    
+    # Query 1: Recently modified documents
+    modified_query = (
         "mimeType='application/vnd.google-apps.document' "
-        f"and (modifiedTime > '{iso_time}' or sharedWithMe)"
+        f"and modifiedTime > '{iso_time}'"
     )
+    
+    # Query 2: All accessible documents (to catch newly shared ones)
+    # We'll compare against known documents to find new ones
+    all_query = "mimeType='application/vnd.google-apps.document'"
 
     files: list[dict[str, Any]] = []
+    
+    # Get recently modified documents
     page_token: str | None = None
     while True:
         params = {
-            "q": query,
-            "fields": "nextPageToken, files(id, name, modifiedTime, sharedWithMeTime)",
+            "q": modified_query,
+            "fields": "nextPageToken, files(id, name, modifiedTime, createdTime)",
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
-            "corpora": "user",
+            "corpora": "allDrives",
             "pageSize": 1000,
         }
         if page_token:
@@ -58,9 +67,49 @@ def list_recent_docs(service: Any, since_time: datetime) -> list[dict[str, Any]]
         if not page_token:
             break
 
+    # Get all accessible documents to find newly shared ones
+    # We limit this to recent createdTime to avoid processing too many old documents
+    recent_created_time = (since_time - timedelta(days=30)).replace(microsecond=0).isoformat("T") + "Z"
+    all_query_with_limit = f"{all_query} and createdTime > '{recent_created_time}'"
+    
+    page_token = None
+    all_files: list[dict[str, Any]] = []
+    while True:
+        params = {
+            "q": all_query_with_limit,
+            "fields": "nextPageToken, files(id, name, modifiedTime, createdTime)",
+            "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True,
+            "corpora": "allDrives",
+            "pageSize": 1000,
+        }
+        if page_token:
+            params["pageToken"] = page_token
+        results = service.files().list(**params).execute(num_retries=3)
+        all_files.extend(results.get("files", []))
+        page_token = results.get("nextPageToken")
+        if not page_token:
+            break
+
+    # Combine results and deduplicate by file ID
+    files_by_id = {f["id"]: f for f in files}
+    for f in all_files:
+        if f["id"] not in files_by_id:
+            # This is a newly accessible document - check if it's actually "new"
+            # by seeing if it was created recently or if we haven't seen it before
+            created_time = f.get("createdTime")
+            if created_time:
+                try:
+                    created_dt = parse_google_timestamp(created_time)
+                    if created_dt > since_time:
+                        files_by_id[f["id"]] = f
+                except ValueError:
+                    pass
+
     recent_files: list[dict[str, Any]] = []
-    for f in files:
-        for key in ("modifiedTime", "sharedWithMeTime"):
+    for f in files_by_id.values():
+        # Include if recently modified or recently created
+        for key in ("modifiedTime", "createdTime"):
             ts = f.get(key)
             if not ts:
                 continue
@@ -71,6 +120,7 @@ def list_recent_docs(service: Any, since_time: datetime) -> list[dict[str, Any]]
             if dt > since_time:
                 recent_files.append(f)
                 break
+    
     return recent_files
 
 
