@@ -9,7 +9,7 @@
 
 People often wonder if AI will replace white-collar workers, but what if it could replace our bosses instead? In many Singapore offices a staff member sends draft documents up the chain for review. ClearMyBoss explores that idea by letting an AI read your Google Doc and leave short, boss-style comments so you can tidy up your work before it reaches a human manager.
 
-### Why
+### How it works
 
 * Draft a report or proposal in Google Docs.
 * Share it with the service account before sending it to your boss.
