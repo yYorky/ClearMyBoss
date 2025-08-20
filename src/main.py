@@ -101,12 +101,12 @@ def _process_document(
 def _latest_timestamp(file: dict[str, Any], current: datetime) -> datetime:
     """Return the latest relevant timestamp for ``file``.
 
-    Considers both ``modifiedTime`` and ``sharedWithMeTime`` and returns the
+    Considers both ``modifiedTime`` and ``createdTime`` and returns the
     newer one, falling back to ``current`` when parsing fails or timestamps are
     missing.
     """
 
-    for key in ("modifiedTime", "sharedWithMeTime"):
+    for key in ("modifiedTime", "createdTime"):
         ts = file.get(key)
         if not ts:
             continue

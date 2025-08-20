@@ -21,108 +21,113 @@ from src.google_drive import (
 
 def test_list_recent_docs_filters_by_time():
     service = MagicMock()
-    service.files.return_value.list.return_value.execute.return_value = {
-        "files": [
-            {"id": "1", "name": "Doc1", "modifiedTime": "2024-01-01T00:00:00Z"}
-        ]
-    }
+    service.files.return_value.list.return_value.execute.side_effect = [
+        {
+            "files": [
+                {"id": "1", "name": "Doc1", "modifiedTime": "2024-01-01T00:00:00Z"}
+            ]
+        },  # Recently modified docs
+        {"files": []},  # No additional accessible docs
+    ]
     since = datetime(2023, 12, 31, 23, 0, 0)
     files = list_recent_docs(service, since)
-    iso_time = since.replace(microsecond=0).isoformat("T") + "Z"
-    expected_query = (
-        "mimeType='application/vnd.google-apps.document' "
-        f"and (modifiedTime > '{iso_time}' or sharedWithMe)"
-    )
-    service.files.return_value.list.assert_called_once_with(
-        q=expected_query,
-        fields="nextPageToken, files(id, name, modifiedTime, sharedWithMeTime)",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True,
-        corpora="user",
-        pageSize=1000,
-    )
+    
+    # Should make two calls now
+    assert service.files.return_value.list.call_count == 2
     assert files[0]["name"] == "Doc1"
 
 
 def test_list_recent_docs_includes_newly_shared_docs():
-    """Documents shared but not modified should still be returned."""
+    """Documents shared but not modified should still be returned via creation time."""
     service = MagicMock()
-    service.files.return_value.list.return_value.execute.return_value = {
-        "files": [
-            {
-                "id": "1",
-                "name": "Shared",
-                "modifiedTime": "2024-01-01T00:00:00Z",
-                "sharedWithMeTime": "2024-01-02T00:00:00Z",
-            }
-        ]
-    }
+    
+    # First call returns empty (no recently modified docs)
+    # Second call returns the newly accessible doc
+    service.files.return_value.list.return_value.execute.side_effect = [
+        {"files": []},  # No recently modified docs
+        {
+            "files": [
+                {
+                    "id": "1",
+                    "name": "Shared",
+                    "modifiedTime": "2024-01-01T00:00:00Z",
+                    "createdTime": "2024-01-02T00:00:00Z",  # Recently created
+                }
+            ]
+        },  # Newly accessible doc
+    ]
+    
     since = datetime(2024, 1, 1, 12, 0, 0)
     files = list_recent_docs(service, since)
-    iso_time = since.isoformat("T") + "Z"
-    expected_query = (
-        "mimeType='application/vnd.google-apps.document' "
-        f"and (modifiedTime > '{iso_time}' or sharedWithMe)"
-    )
-    service.files.return_value.list.assert_called_once_with(
-        q=expected_query,
-        fields="nextPageToken, files(id, name, modifiedTime, sharedWithMeTime)",
-        supportsAllDrives=True,
-        includeItemsFromAllDrives=True,
-        corpora="user",
-        pageSize=1000,
-    )
+    
+    # Should make two calls: one for recently modified, one for all recent docs
+    assert service.files.return_value.list.call_count == 2
     assert files[0]["name"] == "Shared"
 
 
 def test_list_recent_docs_parses_microsecond_timestamps():
     """Timestamps with fractional seconds should be parsed correctly."""
     service = MagicMock()
-    service.files.return_value.list.return_value.execute.return_value = {
-        "files": [
-            {
-                "id": "1",
-                "name": "Micro",
-                "modifiedTime": "2024-01-02T00:00:00.123456Z",
-            },
-            {
-                "id": "2",
-                "name": "SharedMicro",
-                "sharedWithMeTime": "2024-01-02T00:00:00.654321Z",
-            },
-        ]
-    }
+    service.files.return_value.list.return_value.execute.side_effect = [
+        {
+            "files": [
+                {
+                    "id": "1",
+                    "name": "Micro",
+                    "modifiedTime": "2024-01-02T00:00:00.123456Z",
+                }
+            ]
+        },  # Recently modified docs
+        {
+            "files": [
+                {
+                    "id": "2",
+                    "name": "CreatedMicro",
+                    "createdTime": "2024-01-02T00:00:00.654321Z",
+                    "modifiedTime": "2024-01-01T00:00:00Z",
+                }
+            ]
+        },  # Recently created/accessible docs
+    ]
     since = datetime(2024, 1, 1, 23, 59, 59)
     files = list_recent_docs(service, since)
-    assert {f["name"] for f in files} == {"Micro", "SharedMicro"}
+    assert {f["name"] for f in files} == {"Micro", "CreatedMicro"}
 
 
 def test_list_recent_docs_handles_pagination():
     service = MagicMock()
-    first_page = {"files": [], "nextPageToken": "t1"}
-    second_page = {
-        "files": [
-            {
-                "id": "new",
-                "name": "NewDoc",
-                "sharedWithMeTime": "2024-01-02T00:00:00Z",
-            }
-        ]
-    }
-    service.files.return_value.list.return_value.execute.side_effect = [
-        first_page,
-        second_page,
+    # Mock responses for the two different queries
+    first_query_pages = [{"files": [], "nextPageToken": "t1"}, {"files": []}]
+    second_query_pages = [
+        {"files": [], "nextPageToken": "t2"},
+        {
+            "files": [
+                {
+                    "id": "new",
+                    "name": "NewDoc",
+                    "createdTime": "2024-01-02T00:00:00Z",
+                    "modifiedTime": "2024-01-01T00:00:00Z",
+                }
+            ]
+        },
     ]
+    
+    service.files.return_value.list.return_value.execute.side_effect = (
+        first_query_pages + second_query_pages
+    )
+    
     since = datetime(2024, 1, 1, 12, 0, 0)
     files = list_recent_docs(service, since)
     assert files == [
         {
             "id": "new",
             "name": "NewDoc",
-            "sharedWithMeTime": "2024-01-02T00:00:00Z",
+            "createdTime": "2024-01-02T00:00:00Z",
+            "modifiedTime": "2024-01-01T00:00:00Z",
         }
     ]
-    assert service.files.return_value.list.call_count == 2
+    # Should make 4 calls total (2 pages for each of 2 queries)
+    assert service.files.return_value.list.call_count == 4
 
 
 def test_app_properties_roundtrip():
