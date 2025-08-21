@@ -120,24 +120,27 @@ def _latest_timestamp(file: dict[str, Any], current: datetime) -> datetime:
 
 
 def run_once(
-    drive_service: Any, docs_service: Any, since: datetime
-) -> datetime:
-    """Process documents changed since ``since`` and return new timestamp.
+    drive_service: Any, docs_service: Any, since: datetime, page_token: str
+) -> tuple[datetime, str]:
+    """Process documents changed since ``since`` and return new timestamp and token.
 
     Documents are considered changed if they were modified or newly shared with
-    the service account after the provided ``since`` timestamp.
+    the service account after the provided ``since`` timestamp. ``page_token`` is
+    used to query the Drive changes feed for permission updates.
     """
 
     logger.info(
-        "Starting document review cycle. Checking for documents changed since: %s", since
+        "Starting document review cycle. Checking for documents changed since: %s",
+        since,
     )
 
     try:
-        files = list_recent_docs(drive_service, since)
+        files, new_page_token = list_recent_docs(drive_service, since, page_token)
         logger.info("Found %d documents to process", len(files))
     except Exception as e:  # pragma: no cover - logging path
         logger.error(f"Error during document review cycle: {e}")
         files = []
+        new_page_token = page_token
 
     processed_count = 0
     latest_time = since
@@ -154,9 +157,10 @@ def run_once(
 
     new_timestamp = max(latest_time, datetime.utcnow())
     logger.info(
-        "Next review cycle will check for documents changed after: %s", new_timestamp
+        "Next review cycle will check for documents changed after: %s",
+        new_timestamp,
     )
-    return new_timestamp
+    return new_timestamp, new_page_token
 
 
 def main() -> None:
@@ -174,14 +178,21 @@ def main() -> None:
 
         since = datetime.utcnow()
         logger.info(f"Initial timestamp set to: {since}")
+        page_token = (
+            drive_service.changes()
+            .getStartPageToken(supportsAllDrives=True)
+            .execute()
+            .get("startPageToken", "")
+        )
+        logger.info(f"Initial change token set to: {page_token}")
         
         import schedule
         
         def job() -> None:
-            nonlocal since
+            nonlocal since, page_token
             logger.info("=" * 60)
             logger.info("Scheduled job triggered - starting document review")
-            since = run_once(drive_service, docs_service, since)
+            since, page_token = run_once(drive_service, docs_service, since, page_token)
             logger.info("Scheduled job completed")
             logger.info("=" * 60)
         
