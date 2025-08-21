@@ -122,14 +122,20 @@ def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
             "fields": (
                 "nextPageToken, files(id,name,modifiedTime,createdTime,sharedWithMeTime)"
             ),
-            "supportsAllDrives": True,
-            "includeItemsFromAllDrives": True,
             "corpora": "allDrives",
             "pageSize": 1000,
         }
         if page:
             params["pageToken"] = page
-        results = service.files().list(**params).execute(num_retries=3)
+        results = (
+            service.files()
+            .list(
+                **params,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute(num_retries=3)
+        )
         batch = results.get("files", [])
         files.extend(batch)
         logger.info(
