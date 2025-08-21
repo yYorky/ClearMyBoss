@@ -133,10 +133,15 @@ def run_once(
         "Starting document review cycle. Checking for documents changed since: %s",
         since,
     )
+    logger.info("Using change page token: %s", page_token)
 
     try:
         files, new_page_token = list_recent_docs(drive_service, since, page_token)
-        logger.info("Found %d documents to process", len(files))
+        logger.info(
+            "Found %d documents to process (new change token: %s)",
+            len(files),
+            new_page_token,
+        )
     except Exception as e:  # pragma: no cover - logging path
         logger.error(f"Error during document review cycle: {e}")
         files = []
