@@ -2,8 +2,10 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 from .google_drive import build_drive_service, list_recent_docs
@@ -22,6 +24,55 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+# State file for storing Drive change token and timestamp
+STATE_FILE = Path("last_change_token.json")
+
+
+def load_state(drive_service: Any) -> tuple[str, datetime]:
+    """Return stored change token and timestamp.
+
+    Parameters
+    ----------
+    drive_service
+        Authenticated Drive service used to obtain an initial token when no
+        state file exists.
+    """
+
+    if STATE_FILE.exists():
+        try:
+            data = json.loads(STATE_FILE.read_text())
+            token = data.get("page_token")
+            ts_str = data.get("timestamp")
+            if token:
+                if ts_str:
+                    try:
+                        return token, datetime.fromisoformat(ts_str)
+                    except ValueError:
+                        return token, datetime.utcnow()
+                return token, datetime.utcnow()
+        except Exception:  # pragma: no cover - logging path
+            pass
+
+    # No existing state or token missing; obtain a fresh token
+    resp = (
+        drive_service.changes()
+        .getStartPageToken()
+        .execute(num_retries=3)
+    )
+    token = resp.get("startPageToken", "")
+    return token, datetime.utcnow()
+
+
+def save_state(token: str, timestamp: datetime) -> None:
+    """Persist ``token`` and ``timestamp`` to ``STATE_FILE``."""
+
+    data = {
+        "page_token": token,
+        "timestamp": timestamp.isoformat(),
+    }
+    STATE_FILE.write_text(json.dumps(data))
 
 
 def groq_suggest(text: str, context: str) -> dict[str, str]:
@@ -120,12 +171,18 @@ def _latest_timestamp(file: dict[str, Any], current: datetime) -> datetime:
 
 
 def run_once(
-    drive_service: Any, docs_service: Any, since: datetime
-) -> datetime:
-    """Process documents changed since ``since`` and return new timestamp.
+    drive_service: Any,
+    docs_service: Any,
+    since: datetime,
+    page_token: str,
+) -> tuple[str, datetime]:
+    """Process recent documents and return new Drive change token and timestamp.
 
     Documents are considered changed if they were modified or newly shared with
-    the service account after the provided ``since`` timestamp.
+    the service account after the provided ``since`` timestamp.  The Drive change
+    ``page_token`` is advanced at the end of each run using
+    ``changes().getStartPageToken`` so the caller can persist it for future
+    executions.
     """
 
     logger.info(
@@ -156,7 +213,20 @@ def run_once(
     logger.info(
         "Next review cycle will check for documents changed after: %s", new_timestamp
     )
-    return new_timestamp
+
+    # Advance and return a fresh change token so state can be persisted
+    try:
+        resp = (
+            drive_service.changes()
+            .getStartPageToken()
+            .execute(num_retries=3)
+        )
+        new_token = resp.get("startPageToken", page_token)
+    except Exception as e:  # pragma: no cover - logging path
+        logger.error("Error obtaining Drive change token: %s", e)
+        new_token = page_token
+
+    return new_token, new_timestamp
 
 
 def main() -> None:
@@ -172,16 +242,21 @@ def main() -> None:
         docs_service = build_docs_service()
         logger.info("Google Docs service initialized successfully")
 
-        since = datetime.utcnow()
-        logger.info(f"Initial timestamp set to: {since}")
-        
+        page_token, since = load_state(drive_service)
+        logger.info(
+            "Loaded state: page_token=%s, since=%s", page_token, since
+        )
+
         import schedule
-        
+
         def job() -> None:
-            nonlocal since
+            nonlocal since, page_token
             logger.info("=" * 60)
             logger.info("Scheduled job triggered - starting document review")
-            since = run_once(drive_service, docs_service, since)
+            page_token, since = run_once(
+                drive_service, docs_service, since, page_token
+            )
+            save_state(page_token, since)
             logger.info("Scheduled job completed")
             logger.info("=" * 60)
         

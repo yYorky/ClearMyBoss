@@ -1,11 +1,15 @@
 from datetime import datetime
 from unittest.mock import MagicMock
+import json
 
 from src.main import run_once, _process_document, _latest_timestamp
 
 
 def test_run_once_reviews_and_posts(monkeypatch):
     drive = MagicMock()
+    drive.changes.return_value.getStartPageToken.return_value.execute.return_value = {
+        "startPageToken": "tok2"
+    }
     docs = MagicMock()
     monkeypatch.setattr(
         "src.main.list_recent_docs", lambda svc, since: [{"id": "1"}, {"id": "2"}]
@@ -29,13 +33,15 @@ def test_run_once_reviews_and_posts(monkeypatch):
     monkeypatch.setattr("src.main.post_comments", fake_post)
 
     since = datetime.utcnow()
-    new_since = run_once(drive, docs, since)
+    token = "tok1"
+    new_token, new_since = run_once(drive, docs, since, token)
 
     assert posted == [(
         "1",
         [{"suggestion": "s1", "hash": "h1", "start_index": 0, "end_index": 1}],
     )]
     assert isinstance(new_since, datetime) and new_since >= since
+    assert new_token == "tok2"
 
 
 def test_process_document_success(monkeypatch):
@@ -82,3 +88,43 @@ def test_latest_timestamp():
     }
 
     assert _latest_timestamp(file, since) == datetime(2022, 6, 1)
+
+
+def test_state_persistence(monkeypatch, tmp_path):
+    from src import main as runner
+
+    drive = MagicMock()
+    drive.changes.return_value.getStartPageToken.return_value.execute.return_value = {
+        "startPageToken": "init"
+    }
+
+    state_file = tmp_path / "state.json"
+    monkeypatch.setattr(runner, "STATE_FILE", state_file)
+
+    token, ts = runner.load_state(drive)
+    assert token == "init"
+    assert isinstance(ts, datetime)
+
+    new_ts = datetime(2021, 1, 1)
+    runner.save_state("tok2", new_ts)
+
+    token2, ts2 = runner.load_state(drive)
+    assert token2 == "tok2"
+    assert ts2 == new_ts
+
+
+def test_load_state_recovers_missing_token(monkeypatch, tmp_path):
+    from src import main as runner
+
+    drive = MagicMock()
+    drive.changes.return_value.getStartPageToken.return_value.execute.return_value = {
+        "startPageToken": "fresh",
+    }
+
+    state_file = tmp_path / "state.json"
+    state_file.write_text(json.dumps({"timestamp": "2020-01-01T00:00:00"}))
+    monkeypatch.setattr(runner, "STATE_FILE", state_file)
+
+    token, ts = runner.load_state(drive)
+    assert token == "fresh"
+    assert isinstance(ts, datetime)
