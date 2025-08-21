@@ -39,6 +39,55 @@ def _get_permission_id(service: Any) -> str:
     return about.get("user", {}).get("permissionId", "")
 
 
+def list_all_drive_ids(service: Any) -> list[str]:
+    """Return IDs for all shared drives accessible to the service account."""
+    logger.info("Listing all accessible drive IDs")
+    drive_ids: list[str] = []
+    page: str | None = None
+    while True:
+        params = {
+            "fields": "nextPageToken, drives(id)",
+            "pageSize": 100,
+        }
+        if page:
+            params["pageToken"] = page
+        results = service.drives().list(**params).execute(num_retries=3)
+        batch = [d.get("id") for d in results.get("drives", []) if d.get("id")]
+        drive_ids.extend(batch)
+        logger.info(
+            "Retrieved %d drive ids (nextPageToken=%s)",
+            len(batch),
+            results.get("nextPageToken"),
+        )
+        page = results.get("nextPageToken")
+        if not page:
+            break
+
+    logger.info("Total %d drive ids retrieved", len(drive_ids))
+    return drive_ids
+
+
+def get_start_page_tokens(service: Any) -> dict[str, str]:
+    """Return mapping of drive identifiers to change feed start page tokens."""
+    tokens: dict[str, str] = {}
+    user_token = (
+        service.changes()
+        .getStartPageToken(supportsAllDrives=True)
+        .execute(num_retries=3)
+        .get("startPageToken", "")
+    )
+    tokens["user"] = user_token
+    for drive_id in list_all_drive_ids(service):
+        token = (
+            service.changes()
+            .getStartPageToken(driveId=drive_id, supportsAllDrives=True)
+            .execute(num_retries=3)
+            .get("startPageToken", "")
+        )
+        tokens[drive_id] = token
+    return tokens
+
+
 def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
     """Return all Google Docs currently shared with the service account.
 
@@ -85,20 +134,16 @@ def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
     return files
 
 
-def list_recent_changes(
-    service: Any, page_token: str
+def _list_drive_changes(
+    service: Any, page_token: str, drive_id: str | None = None
 ) -> tuple[list[dict[str, Any]], str]:
-    """Return files whose metadata or permissions changed since ``page_token``.
+    """Return Drive change records for a specific drive or the user feed."""
 
-    Parameters
-    ----------
-    service
-        Authenticated Google Drive service instance.
-    page_token
-        Change page token retrieved from ``changes().getStartPageToken``.
-    """
-
-    logger.info("Fetching Drive changes starting from page token %s", page_token)
+    logger.info(
+        "Fetching Drive changes starting from page token %s (drive_id=%s)",
+        page_token,
+        drive_id or "user",
+    )
     files: list[dict[str, Any]] = []
     token = page_token
     while True:
@@ -114,6 +159,8 @@ def list_recent_changes(
             "pageSize": 1000,
             "includePermissionsForView": "published",
         }
+        if drive_id:
+            params["driveId"] = drive_id
         results = service.changes().list(**params).execute(num_retries=3)
         changes = results.get("changes", [])
         logger.info(
@@ -138,10 +185,33 @@ def list_recent_changes(
             return files, new_token
 
 
+def list_recent_changes_all(
+    service: Any, page_tokens: dict[str, str]
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Return aggregated Drive changes for all tracked drives.
+
+    Parameters
+    ----------
+    service
+        Authenticated Google Drive service instance.
+    page_tokens
+        Mapping of ``drive_id`` (or ``"user"``) to their last seen page token.
+    """
+
+    all_files: list[dict[str, Any]] = []
+    new_tokens: dict[str, str] = {}
+    for key, token in page_tokens.items():
+        drive_id = None if key == "user" else key
+        files, new_token = _list_drive_changes(service, token, drive_id)
+        all_files.extend(files)
+        new_tokens[key] = new_token
+    return all_files, new_tokens
+
+
 def list_recent_docs(
-    service: Any, since_time: datetime, page_token: str
-) -> tuple[list[dict[str, Any]], str]:
-    """Return Google Docs changed or shared since ``since_time`` and ``page_token``.
+    service: Any, since_time: datetime, page_tokens: dict[str, str]
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Return Google Docs changed or shared since ``since_time`` using change tokens.
 
     Parameters
     ----------
@@ -150,8 +220,8 @@ def list_recent_docs(
     since_time
         ``datetime`` of the last run. Documents with ``modifiedTime`` after this
         timestamp are returned.
-    page_token
-        Change page token from the previous run used to query the changes feed.
+    page_tokens
+        Mapping of change page tokens from the previous run for each tracked drive.
     """
 
     iso_time = since_time.replace(microsecond=0).isoformat("T") + "Z"
@@ -196,7 +266,7 @@ def list_recent_docs(
 
     # Fetch changes to catch newly shared docs
     permission_id = _get_permission_id(service)
-    change_files, new_page_token = list_recent_changes(service, page_token)
+    change_files, new_page_tokens = list_recent_changes_all(service, page_tokens)
     change_files_filtered: list[dict[str, Any]] = []
     for f in change_files:
         if permission_id in f.get("permissionIds", []):
@@ -219,7 +289,7 @@ def list_recent_docs(
     logger.info(
         "Change feed returned %d docs after filtering; new change token %s",
         len(change_files_filtered),
-        new_page_token,
+        new_page_tokens,
     )
 
     files_by_id = {f["id"]: f for f in files}
@@ -279,7 +349,7 @@ def list_recent_docs(
 
     logger.info("Returning %d documents after filtering", len(recent_files))
 
-    return recent_files, new_page_token
+    return recent_files, new_page_tokens
 
 
 def get_app_properties(service: Any, file_id: str) -> tuple[dict[str, str], str]:
