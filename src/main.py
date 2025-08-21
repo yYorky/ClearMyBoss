@@ -6,7 +6,7 @@ import logging
 import time
 from typing import Any
 
-from .google_drive import build_drive_service, list_recent_docs
+from .google_drive import build_drive_service, list_recent_docs, list_all_shared_docs
 from .google_docs import build_docs_service
 from .groq_client import get_suggestions
 from .time_utils import parse_google_timestamp
@@ -180,6 +180,12 @@ def main() -> None:
         logger.info("Initializing Google Docs service...")
         docs_service = build_docs_service()
         logger.info("Google Docs service initialized successfully")
+
+        logger.info("Processing documents already shared with the service account...")
+        shared_docs = list_all_shared_docs(drive_service)
+        for f in shared_docs:
+            _process_document(drive_service, docs_service, f)
+        logger.info("Processed %d pre-existing shared documents", len(shared_docs))
 
         since = datetime.utcnow()
         logger.info(f"Initial timestamp set to: {since}")

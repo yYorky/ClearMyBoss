@@ -10,6 +10,7 @@ from src.google_drive import (
     get_share_message,
     get_app_properties,
     list_recent_docs,
+    list_all_shared_docs,
     reply_to_comment,
     update_app_properties,
     build_drive_service,
@@ -17,6 +18,17 @@ from src.google_drive import (
     list_replies,
     create_comment,
 )
+
+
+def test_list_all_shared_docs_handles_pagination():
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.side_effect = [
+        {"files": [{"id": "1"}], "nextPageToken": "t1"},
+        {"files": [{"id": "2"}]},
+    ]
+    docs = list_all_shared_docs(service)
+    assert docs == [{"id": "1"}, {"id": "2"}]
+    assert service.files.return_value.list.call_count == 2
 
 
 def test_list_recent_docs_filters_by_time():

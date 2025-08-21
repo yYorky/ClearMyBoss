@@ -29,6 +29,48 @@ def _get_permission_id(service: Any) -> str:
     return about.get("user", {}).get("permissionId", "")
 
 
+def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
+    """Return all Google Docs currently shared with the service account.
+
+    Parameters
+    ----------
+    service
+        Authenticated Google Drive service instance.
+    """
+
+    logger.info("Listing all shared Google Docs")
+    query = "mimeType='application/vnd.google-apps.document' and sharedWithMe"
+    files: list[dict[str, Any]] = []
+    page: str | None = None
+    while True:
+        params = {
+            "q": query,
+            "fields": (
+                "nextPageToken, files(id,name,modifiedTime,createdTime,sharedWithMeTime)"
+            ),
+            "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True,
+            "corpora": "allDrives",
+            "pageSize": 1000,
+        }
+        if page:
+            params["pageToken"] = page
+        results = service.files().list(**params).execute(num_retries=3)
+        batch = results.get("files", [])
+        files.extend(batch)
+        logger.info(
+            "Retrieved %d shared docs (nextPageToken=%s)",
+            len(batch),
+            results.get("nextPageToken"),
+        )
+        page = results.get("nextPageToken")
+        if not page:
+            break
+
+    logger.info("Total %d shared docs retrieved", len(files))
+    return files
+
+
 def list_recent_changes(
     service: Any, page_token: str
 ) -> tuple[list[dict[str, Any]], str]:
