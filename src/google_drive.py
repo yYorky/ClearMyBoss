@@ -2,14 +2,16 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
+import logging
 from typing import Any
 
 from .google_service import build_service
 from .time_utils import parse_google_timestamp
 
-import json
-
 SCOPES = ["https://www.googleapis.com/auth/drive"]
+
+logger = logging.getLogger(__name__)
 
 
 def build_drive_service() -> Any:
@@ -116,20 +118,45 @@ def list_recent_docs(
 
     recent_files: list[dict[str, Any]] = []
     for f in files_by_id.values():
+        fid = f.get("id")
+        name = f.get("name")
+        timestamps = {
+            key: f.get(key)
+            for key in ("modifiedTime", "createdTime", "sharedWithMeTime")
+        }
+        logger.debug(
+            "Evaluating file %s (%s) with timestamps %s", fid, name, timestamps
+        )
         include = f.pop("_include_unconditionally", False)
+        missing_keys = [k for k, v in timestamps.items() if not v]
+        newer_found = False
         if not include:
-            for key in ("modifiedTime", "createdTime", "sharedWithMeTime"):
-                ts = f.get(key)
+            for key, ts in timestamps.items():
                 if not ts:
                     continue
                 try:
                     dt = parse_google_timestamp(ts)
                 except ValueError:
+                    logger.debug(
+                        "File %s (%s) has invalid %s: %s", fid, name, key, ts
+                    )
                     continue
                 if dt > since_time:
                     include = True
+                    newer_found = True
                     break
-        if include:
+        if not include:
+            reasons: list[str] = []
+            if missing_keys:
+                reasons.extend(f"{k} missing" for k in missing_keys)
+            if not newer_found and len(missing_keys) < 3:
+                reasons.append("no timestamps newer than cutoff")
+            if not reasons:
+                reasons.append("no timestamps available")
+            logger.debug(
+                "Excluding file %s (%s): %s", fid, name, "; ".join(reasons)
+            )
+        else:
             recent_files.append(f)
 
     return recent_files, new_page_token
