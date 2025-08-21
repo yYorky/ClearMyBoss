@@ -193,6 +193,36 @@ def test_reshared_docs_are_reprocessed(monkeypatch, tmp_path):
         assert json.load(f) == ["1"]
 
 
+def test_failed_docs_are_reprocessed(monkeypatch, tmp_path):
+    drive = MagicMock()
+    docs = MagicMock()
+    cache = DocumentCache(tmp_path / "cache.json")
+
+    monkeypatch.setattr("src.main.list_all_shared_docs", lambda svc: [{"id": "1"}])
+    monkeypatch.setattr(
+        "src.main.list_recent_docs", lambda svc, since, tokens: ([], tokens)
+    )
+
+    calls: list[str] = []
+
+    def fake_process(drive_service, docs_service, file):
+        calls.append(file["id"])
+        return len(calls) > 1
+
+    monkeypatch.setattr("src.main._process_document", fake_process)
+
+    since = datetime.utcnow()
+    tokens: dict[str, str] = {}
+
+    since, tokens = run_once(drive, docs, since, tokens, cache)
+    assert calls == ["1"]
+    assert cache.ids == set()
+
+    since, tokens = run_once(drive, docs, since, tokens, cache)
+    assert calls == ["1", "1"]
+    assert cache.ids == {"1"}
+
+
 def test_run_once_refreshes_token_on_410(monkeypatch, tmp_path):
     drive = MagicMock()
     docs = MagicMock()
