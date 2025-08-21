@@ -78,7 +78,7 @@ def test_latest_timestamp():
     since = datetime(2020, 1, 1)
     file = {
         "modifiedTime": "2021-02-01T00:00:00Z",
-        "sharedWithMeTime": "2020-06-01T00:00:00Z",
+        "sharedWithMeTime": "2022-06-01T00:00:00Z",
     }
 
-    assert _latest_timestamp(file, since) == datetime(2021, 2, 1)
+    assert _latest_timestamp(file, since) == datetime(2022, 6, 1)
