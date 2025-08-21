@@ -163,7 +163,7 @@ def _list_drive_changes(
             "fields": (
                 "nextPageToken,newStartPageToken,"
                 "changes(removed,file(id,name,mimeType,modifiedTime,createdTime,"
-                "sharedWithMeTime,permissionIds,driveId,capabilities(canRead,canComment)))"
+                "sharedWithMeTime,permissionIds,driveId,capabilities(canComment)))"
             ),
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
@@ -252,7 +252,7 @@ def list_recent_docs(
         params = {
             "q": modified_query,
             "fields": (
-                "nextPageToken, files(id,name,driveId,capabilities(canRead,canComment),modifiedTime,createdTime,sharedWithMeTime)"
+                "nextPageToken, files(id,name,driveId,capabilities(canComment),modifiedTime,createdTime,sharedWithMeTime)"
             ),
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
@@ -289,11 +289,11 @@ def list_recent_docs(
         if not has_access:
             info = (
                 service.files()
-                .get(fileId=fid, fields="id,driveId,capabilities(canRead,canComment)")
+                .get(fileId=fid, fields="id,driveId,capabilities(canComment)")
                 .execute(num_retries=3)
             )
             has_access = (
-                info.get("capabilities", {}).get("canRead") is True
+                info.get("capabilities", {}).get("canComment") is True
                 if isinstance(info, dict)
                 else False
             )
@@ -325,10 +325,9 @@ def list_recent_docs(
         name = f.get("name")
         caps = f.get("capabilities", {})
         logger.info(
-            "File %s driveId=%s canRead=%s canComment=%s",
+            "File %s driveId=%s canComment=%s",
             fid,
             f.get("driveId"),
-            caps.get("canRead"),
             caps.get("canComment"),
         )
         timestamps = {
