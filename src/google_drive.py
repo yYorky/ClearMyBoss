@@ -19,6 +19,16 @@ def build_drive_service() -> Any:
     return build_service("drive", "v3", SCOPES)
 
 
+def _get_permission_id(service: Any) -> str:
+    """Return the Drive permission ID for the authenticated service account."""
+    about = (
+        service.about()
+        .get(fields="user(permissionId)")
+        .execute(num_retries=3)
+    )
+    return about.get("user", {}).get("permissionId", "")
+
+
 def list_recent_changes(
     service: Any, page_token: str
 ) -> tuple[list[dict[str, Any]], str]:
@@ -40,7 +50,8 @@ def list_recent_changes(
             "pageToken": token,
             "fields": (
                 "nextPageToken,newStartPageToken,"
-                "changes(file(id,name,mimeType,modifiedTime,createdTime,sharedWithMeTime))"
+                "changes(removed,file(id,name,mimeType,modifiedTime,createdTime,"
+                "sharedWithMeTime,permissionIds))"
             ),
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
@@ -54,6 +65,8 @@ def list_recent_changes(
             results.get("nextPageToken"),
         )
         for change in changes:
+            if change.get("removed"):
+                continue
             file = change.get("file")
             if file and file.get("mimeType") == "application/vnd.google-apps.document":
                 files.append(file)
@@ -125,15 +138,21 @@ def list_recent_docs(
     logger.info("Total %d docs from modifiedTime query", len(files))
 
     # Fetch changes to catch newly shared docs
+    permission_id = _get_permission_id(service)
     change_files, new_page_token = list_recent_changes(service, page_token)
+    change_files_filtered: list[dict[str, Any]] = []
+    for f in change_files:
+        if permission_id in f.get("permissionIds", []):
+            f.pop("permissionIds", None)
+            change_files_filtered.append(f)
     logger.info(
-        "Change feed returned %d docs; new change token %s",
-        len(change_files),
+        "Change feed returned %d docs after filtering; new change token %s",
+        len(change_files_filtered),
         new_page_token,
     )
 
     files_by_id = {f["id"]: f for f in files}
-    for f in change_files:
+    for f in change_files_filtered:
         fid = f.get("id")
         if not fid:
             continue
