@@ -32,6 +32,7 @@ def list_recent_changes(
         Change page token retrieved from ``changes().getStartPageToken``.
     """
 
+    logger.info("Fetching Drive changes starting from page token %s", page_token)
     files: list[dict[str, Any]] = []
     token = page_token
     while True:
@@ -46,13 +47,25 @@ def list_recent_changes(
             "pageSize": 1000,
         }
         results = service.changes().list(**params).execute(num_retries=3)
-        for change in results.get("changes", []):
+        changes = results.get("changes", [])
+        logger.info(
+            "Retrieved %d change records (nextPageToken=%s)",
+            len(changes),
+            results.get("nextPageToken"),
+        )
+        for change in changes:
             file = change.get("file")
             if file and file.get("mimeType") == "application/vnd.google-apps.document":
                 files.append(file)
         token = results.get("nextPageToken")
         if not token:
-            return files, results.get("newStartPageToken", page_token)
+            new_token = results.get("newStartPageToken", page_token)
+            logger.info(
+                "Finished fetching changes. %d document entries collected. New token %s",
+                len(files),
+                new_token,
+            )
+            return files, new_token
 
 
 def list_recent_docs(
@@ -78,6 +91,8 @@ def list_recent_docs(
         f"and modifiedTime > '{iso_time}'"
     )
 
+    logger.info("Listing docs with modifiedTime after %s", iso_time)
+
     files: list[dict[str, Any]] = []
 
     # Fetch recently modified docs
@@ -96,13 +111,26 @@ def list_recent_docs(
         if file_page:
             params["pageToken"] = file_page
         results = service.files().list(**params).execute(num_retries=3)
-        files.extend(results.get("files", []))
+        batch = results.get("files", [])
+        files.extend(batch)
+        logger.info(
+            "Retrieved %d modified docs (nextPageToken=%s)",
+            len(batch),
+            results.get("nextPageToken"),
+        )
         file_page = results.get("nextPageToken")
         if not file_page:
             break
 
+    logger.info("Total %d docs from modifiedTime query", len(files))
+
     # Fetch changes to catch newly shared docs
     change_files, new_page_token = list_recent_changes(service, page_token)
+    logger.info(
+        "Change feed returned %d docs; new change token %s",
+        len(change_files),
+        new_page_token,
+    )
 
     files_by_id = {f["id"]: f for f in files}
     for f in change_files:
@@ -158,6 +186,8 @@ def list_recent_docs(
             )
         else:
             recent_files.append(f)
+
+    logger.info("Returning %d documents after filtering", len(recent_files))
 
     return recent_files, new_page_token
 
