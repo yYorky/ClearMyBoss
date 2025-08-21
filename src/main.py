@@ -6,7 +6,12 @@ import logging
 import time
 from typing import Any
 
-from .google_drive import build_drive_service, list_recent_docs, list_all_shared_docs
+from .google_drive import (
+    build_drive_service,
+    list_recent_docs,
+    list_all_shared_docs,
+    get_start_page_tokens,
+)
 from .google_docs import build_docs_service
 from .groq_client import get_suggestions
 from .time_utils import parse_google_timestamp
@@ -127,14 +132,15 @@ def run_once(
     drive_service: Any,
     docs_service: Any,
     since: datetime,
-    page_token: str,
+    page_tokens: dict[str, str],
     doc_cache: DocumentCache | None = None,
-) -> tuple[datetime, str]:
-    """Process documents changed since ``since`` and return new timestamp and token.
+) -> tuple[datetime, dict[str, str]]:
+    """Process documents changed since ``since`` and return new timestamp and tokens.
 
     Documents are considered changed if they were modified or newly shared with
-    the service account after the provided ``since`` timestamp. ``page_token`` is
-    used to query the Drive changes feed for permission updates.
+    the service account after the provided ``since`` timestamp. ``page_tokens`` is
+    a mapping of Drive change tokens used to query the Drive changes feed for
+    permission updates across all drives.
     """
 
     cache = doc_cache or _DOC_CACHE
@@ -143,7 +149,7 @@ def run_once(
         "Starting document review cycle. Checking for documents changed since: %s",
         since,
     )
-    logger.info("Using change page token: %s", page_token)
+    logger.info("Using change page tokens: %s", page_tokens)
 
     shared_docs = list_all_shared_docs(drive_service)
     current_ids = {f.get("id") for f in shared_docs if f.get("id")}
@@ -151,16 +157,18 @@ def run_once(
     extra_files = [f for f in shared_docs if f.get("id") in new_shared_ids]
 
     try:
-        files, new_page_token = list_recent_docs(drive_service, since, page_token)
+        files, new_page_tokens = list_recent_docs(
+            drive_service, since, page_tokens
+        )
         logger.info(
             "Found %d documents to process (new change token: %s)",
             len(files),
-            new_page_token,
+            new_page_tokens,
         )
     except Exception as e:  # pragma: no cover - logging path
         logger.error(f"Error during document review cycle: {e}")
         files = []
-        new_page_token = page_token
+        new_page_tokens = page_tokens
 
     existing_ids = {f.get("id") for f in files}
     for f in extra_files:
@@ -190,7 +198,7 @@ def run_once(
         "Next review cycle will check for documents changed after: %s",
         new_timestamp,
     )
-    return new_timestamp, new_page_token
+    return new_timestamp, new_page_tokens
 
 
 def main() -> None:
@@ -214,22 +222,17 @@ def main() -> None:
 
         since = datetime.utcnow()
         logger.info(f"Initial timestamp set to: {since}")
-        page_token = (
-            drive_service.changes()
-            .getStartPageToken(supportsAllDrives=True)
-            .execute()
-            .get("startPageToken", "")
-        )
-        logger.info(f"Initial change token set to: {page_token}")
+        page_tokens = get_start_page_tokens(drive_service)
+        logger.info(f"Initial change tokens set to: {page_tokens}")
         
         import schedule
         
         def job() -> None:
-            nonlocal since, page_token
+            nonlocal since, page_tokens
             logger.info("=" * 60)
             logger.info("Scheduled job triggered - starting document review")
-            since, page_token = run_once(
-                drive_service, docs_service, since, page_token, _DOC_CACHE
+            since, page_tokens = run_once(
+                drive_service, docs_service, since, page_tokens, _DOC_CACHE
             )
             logger.info("Scheduled job completed")
             logger.info("=" * 60)

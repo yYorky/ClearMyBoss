@@ -47,12 +47,12 @@ def test_list_recent_docs_filters_by_time():
     }
 
     since = datetime(2023, 12, 31, 23, 0, 0)
-    files, token = list_recent_docs(service, since, "t0")
+    files, tokens = list_recent_docs(service, since, {"user": "t0"})
 
     assert service.files.return_value.list.call_count == 1
     assert service.changes.return_value.list.call_count == 1
     assert files[0]["name"] == "Doc1"
-    assert token == "t1"
+    assert tokens == {"user": "t1"}
 
 
 def test_list_recent_docs_includes_newly_shared_docs():
@@ -81,7 +81,7 @@ def test_list_recent_docs_includes_newly_shared_docs():
     }
 
     since = datetime(2024, 1, 1, 12, 0, 0)
-    files, _ = list_recent_docs(service, since, "t0")
+    files, _ = list_recent_docs(service, since, {"user": "t0"})
 
     assert service.files.return_value.list.call_count == 1
     assert service.changes.return_value.list.call_count == 1
@@ -119,7 +119,7 @@ def test_list_recent_docs_parses_microsecond_timestamps():
         "newStartPageToken": "t1",
     }
     since = datetime(2024, 1, 1, 23, 59, 59)
-    files, _ = list_recent_docs(service, since, "t0")
+    files, _ = list_recent_docs(service, since, {"user": "t0"})
     assert {f["name"] for f in files} == {"Micro", "CreatedMicro"}
 
 
@@ -154,7 +154,7 @@ def test_list_recent_docs_handles_pagination():
     service.changes.return_value.list.return_value.execute.side_effect = change_pages
 
     since = datetime(2024, 1, 1, 12, 0, 0)
-    files, token = list_recent_docs(service, since, "c0")
+    files, tokens = list_recent_docs(service, since, {"user": "c0"})
     assert files == [
         {
             "id": "new",
@@ -164,7 +164,7 @@ def test_list_recent_docs_handles_pagination():
             "modifiedTime": "2024-01-01T00:00:00Z",
         }
     ]
-    assert token == "c2"
+    assert tokens == {"user": "c2"}
     assert service.files.return_value.list.call_count == 2
     assert service.changes.return_value.list.call_count == 2
 
@@ -192,7 +192,7 @@ def test_list_recent_docs_detects_permission_changes_without_shared_time():
     }
 
     since = datetime(2024, 1, 1, 0, 0, 0)
-    files, _ = list_recent_docs(service, since, "t0")
+    files, _ = list_recent_docs(service, since, {"user": "t0"})
     assert files == [
         {
             "id": "1",
@@ -224,9 +224,9 @@ def test_list_recent_docs_skips_changes_without_service_permission():
         "newStartPageToken": "t1",
     }
     since = datetime(2024, 1, 1)
-    files, token = list_recent_docs(service, since, "t0")
+    files, tokens = list_recent_docs(service, since, {"user": "t0"})
     assert files == []
-    assert token == "t1"
+    assert tokens == {"user": "t1"}
 
 
 def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
@@ -258,7 +258,7 @@ def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
     }
 
     since = datetime(2024, 1, 1)
-    files, token = list_recent_docs(service, since, "t0")
+    files, tokens = list_recent_docs(service, since, {"user": "t0"})
 
     assert files == [
         {
@@ -270,7 +270,7 @@ def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
             "sharedWithMeTime": "2024-01-01T00:00:00Z",
         }
     ]
-    assert token == "t1"
+    assert tokens == {"user": "t1"}
     service.permissions.return_value.list.assert_called_once_with(
         fileId="1", fields="permissions(id)"
     )

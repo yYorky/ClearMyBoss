@@ -12,7 +12,7 @@ def test_run_once_reviews_and_posts(monkeypatch, tmp_path):
     docs = MagicMock()
     monkeypatch.setattr(
         "src.main.list_recent_docs",
-        lambda svc, since, token: ([{"id": "1"}, {"id": "2"}], token),
+        lambda svc, since, tokens: ([{"id": "1"}, {"id": "2"}], tokens),
     )
     monkeypatch.setattr("src.main.list_all_shared_docs", lambda svc: [])
 
@@ -35,14 +35,14 @@ def test_run_once_reviews_and_posts(monkeypatch, tmp_path):
 
     since = datetime.utcnow()
     cache = DocumentCache(tmp_path / "cache.json")
-    new_since, new_token = run_once(drive, docs, since, "t0", cache)
+    new_since, new_tokens = run_once(drive, docs, since, {"user": "t0"}, cache)
 
     assert posted == [(
         "1",
         [{"suggestion": "s1", "hash": "h1", "start_index": 0, "end_index": 1}],
     )]
     assert isinstance(new_since, datetime) and new_since >= since
-    assert new_token == "t0"
+    assert new_tokens == {"user": "t0"}
 
 
 def test_process_document_success(monkeypatch):
@@ -94,13 +94,11 @@ def test_latest_timestamp():
 
 def test_main_processes_pre_shared_docs(monkeypatch):
     drive = MagicMock()
-    drive.changes.return_value.getStartPageToken.return_value.execute.return_value = {
-        "startPageToken": "t0"
-    }
     docs = MagicMock()
     monkeypatch.setattr(runner, "build_drive_service", lambda: drive)
     monkeypatch.setattr(runner, "build_docs_service", lambda: docs)
     monkeypatch.setattr(runner, "list_all_shared_docs", lambda svc: [{"id": "1"}, {"id": "2"}])
+    monkeypatch.setattr(runner, "get_start_page_tokens", lambda svc: {"user": "t0"})
 
     processed: list[str] = []
 
@@ -153,12 +151,12 @@ def test_reshared_docs_are_reprocessed(monkeypatch, tmp_path):
         return shared_states.pop(0)
 
     recent_states = [
-        ([], "t1"),
-        ([], "t2"),
-        ([], "t3"),
+        ([], {"user": "t1"}),
+        ([], {"user": "t2"}),
+        ([], {"user": "t3"}),
     ]
 
-    def fake_recent(_svc, _since, _token):
+    def fake_recent(_svc, _since, _tokens):
         return recent_states.pop(0)
 
     monkeypatch.setattr("src.main.list_all_shared_docs", fake_all)
@@ -173,21 +171,21 @@ def test_reshared_docs_are_reprocessed(monkeypatch, tmp_path):
     monkeypatch.setattr("src.main._process_document", fake_process)
 
     since = datetime.utcnow()
-    token = "t0"
+    tokens = {"user": "t0"}
 
-    since, token = run_once(drive, docs, since, token, cache)
+    since, tokens = run_once(drive, docs, since, tokens, cache)
     assert cache.ids == {"1"}
 
     with open(cache.path) as f:
         assert json.load(f) == ["1"]
 
-    since, token = run_once(drive, docs, since, token, cache)
+    since, tokens = run_once(drive, docs, since, tokens, cache)
     assert cache.ids == set()
 
     with open(cache.path) as f:
         assert json.load(f) == []
 
-    since, token = run_once(drive, docs, since, token, cache)
+    since, tokens = run_once(drive, docs, since, tokens, cache)
 
     assert processed == ["1", "1"]
 
