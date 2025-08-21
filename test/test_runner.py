@@ -8,7 +8,8 @@ def test_run_once_reviews_and_posts(monkeypatch):
     drive = MagicMock()
     docs = MagicMock()
     monkeypatch.setattr(
-        "src.main.list_recent_docs", lambda svc, since: [{"id": "1"}, {"id": "2"}]
+        "src.main.list_recent_docs",
+        lambda svc, since, token: ([{"id": "1"}, {"id": "2"}], token),
     )
 
     reviews = [
@@ -29,13 +30,14 @@ def test_run_once_reviews_and_posts(monkeypatch):
     monkeypatch.setattr("src.main.post_comments", fake_post)
 
     since = datetime.utcnow()
-    new_since = run_once(drive, docs, since)
+    new_since, new_token = run_once(drive, docs, since, "t0")
 
     assert posted == [(
         "1",
         [{"suggestion": "s1", "hash": "h1", "start_index": 0, "end_index": 1}],
     )]
     assert isinstance(new_since, datetime) and new_since >= since
+    assert new_token == "t0"
 
 
 def test_process_document_success(monkeypatch):

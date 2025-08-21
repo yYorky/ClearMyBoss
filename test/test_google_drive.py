@@ -21,114 +21,156 @@ from src.google_drive import (
 
 def test_list_recent_docs_filters_by_time():
     service = MagicMock()
-    service.files.return_value.list.return_value.execute.side_effect = [
-        {
-            "files": [
-                {"id": "1", "name": "Doc1", "modifiedTime": "2024-01-01T00:00:00Z"}
-            ]
-        },  # Recently modified docs
-        {"files": []},  # No additional accessible docs
-    ]
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [
+            {"id": "1", "name": "Doc1", "modifiedTime": "2024-01-01T00:00:00Z"}
+        ]
+    }
+    service.changes.return_value.list.return_value.execute.return_value = {
+        "changes": [],
+        "newStartPageToken": "t1",
+    }
+
     since = datetime(2023, 12, 31, 23, 0, 0)
-    files = list_recent_docs(service, since)
-    
-    # Should make two calls now
-    assert service.files.return_value.list.call_count == 2
+    files, token = list_recent_docs(service, since, "t0")
+
+    assert service.files.return_value.list.call_count == 1
+    assert service.changes.return_value.list.call_count == 1
     assert files[0]["name"] == "Doc1"
+    assert token == "t1"
 
 
 def test_list_recent_docs_includes_newly_shared_docs():
     """Docs shared recently should be returned even if created long ago."""
     service = MagicMock()
 
-    # First call returns empty (no recently modified docs)
-    # Second call returns a document that was created earlier but shared now
-    service.files.return_value.list.return_value.execute.side_effect = [
-        {"files": []},  # No recently modified docs
-        {
-            "files": [
-                {
+    service.files.return_value.list.return_value.execute.return_value = {"files": []}
+    service.changes.return_value.list.return_value.execute.return_value = {
+        "changes": [
+            {
+                "file": {
                     "id": "1",
                     "name": "Shared",
+                    "mimeType": "application/vnd.google-apps.document",
                     "modifiedTime": "2023-01-01T00:00:00Z",
                     "createdTime": "2023-01-02T00:00:00Z",
-                    "sharedWithMeTime": "2024-01-02T00:00:00Z",  # Newly shared
+                    "sharedWithMeTime": "2024-01-02T00:00:00Z",
                 }
-            ]
-        },
-    ]
+            }
+        ],
+        "newStartPageToken": "t1",
+    }
 
     since = datetime(2024, 1, 1, 12, 0, 0)
-    files = list_recent_docs(service, since)
+    files, _ = list_recent_docs(service, since, "t0")
 
-    # Should make two calls: one for recently modified, one for all docs
-    assert service.files.return_value.list.call_count == 2
+    assert service.files.return_value.list.call_count == 1
+    assert service.changes.return_value.list.call_count == 1
     assert files[0]["name"] == "Shared"
 
 
 def test_list_recent_docs_parses_microsecond_timestamps():
     """Timestamps with fractional seconds should be parsed correctly."""
     service = MagicMock()
-    service.files.return_value.list.return_value.execute.side_effect = [
-        {
-            "files": [
-                {
-                    "id": "1",
-                    "name": "Micro",
-                    "modifiedTime": "2024-01-02T00:00:00.123456Z",
-                }
-            ]
-        },  # Recently modified docs
-        {
-            "files": [
-                {
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [
+            {
+                "id": "1",
+                "name": "Micro",
+                "modifiedTime": "2024-01-02T00:00:00.123456Z",
+            }
+        ]
+    }
+    service.changes.return_value.list.return_value.execute.return_value = {
+        "changes": [
+            {
+                "file": {
                     "id": "2",
                     "name": "CreatedMicro",
+                    "mimeType": "application/vnd.google-apps.document",
                     "createdTime": "2024-01-02T00:00:00.654321Z",
                     "modifiedTime": "2024-01-01T00:00:00Z",
                 }
-            ]
-        },  # Recently created/accessible docs
-    ]
+            }
+        ],
+        "newStartPageToken": "t1",
+    }
     since = datetime(2024, 1, 1, 23, 59, 59)
-    files = list_recent_docs(service, since)
+    files, _ = list_recent_docs(service, since, "t0")
     assert {f["name"] for f in files} == {"Micro", "CreatedMicro"}
 
 
 def test_list_recent_docs_handles_pagination():
     service = MagicMock()
-    # Mock responses for the two different queries
-    first_query_pages = [{"files": [], "nextPageToken": "t1"}, {"files": []}]
-    second_query_pages = [
-        {"files": [], "nextPageToken": "t2"},
+    # Pages for modified docs query
+    file_pages = [{"files": [], "nextPageToken": "t1"}, {"files": []}]
+    # Pages for changes feed
+    change_pages = [
+        {"changes": [], "nextPageToken": "c1"},
         {
-            "files": [
+            "changes": [
                 {
-                    "id": "new",
-                    "name": "NewDoc",
-                    "createdTime": "2024-01-02T00:00:00Z",
-                    "modifiedTime": "2024-01-01T00:00:00Z",
+                    "file": {
+                        "id": "new",
+                        "name": "NewDoc",
+                        "mimeType": "application/vnd.google-apps.document",
+                        "createdTime": "2024-01-02T00:00:00Z",
+                        "modifiedTime": "2024-01-01T00:00:00Z",
+                    }
                 }
-            ]
+            ],
+            "newStartPageToken": "c2",
         },
     ]
-    
-    service.files.return_value.list.return_value.execute.side_effect = (
-        first_query_pages + second_query_pages
-    )
-    
+
+    service.files.return_value.list.return_value.execute.side_effect = file_pages
+    service.changes.return_value.list.return_value.execute.side_effect = change_pages
+
     since = datetime(2024, 1, 1, 12, 0, 0)
-    files = list_recent_docs(service, since)
+    files, token = list_recent_docs(service, since, "c0")
     assert files == [
         {
             "id": "new",
             "name": "NewDoc",
+            "mimeType": "application/vnd.google-apps.document",
             "createdTime": "2024-01-02T00:00:00Z",
             "modifiedTime": "2024-01-01T00:00:00Z",
         }
     ]
-    # Should make 4 calls total (2 pages for each of 2 queries)
-    assert service.files.return_value.list.call_count == 4
+    assert token == "c2"
+    assert service.files.return_value.list.call_count == 2
+    assert service.changes.return_value.list.call_count == 2
+
+
+def test_list_recent_docs_detects_permission_changes_without_shared_time():
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {"files": []}
+    service.changes.return_value.list.return_value.execute.return_value = {
+        "changes": [
+            {
+                "file": {
+                    "id": "1",
+                    "name": "NoSharedTime",
+                    "mimeType": "application/vnd.google-apps.document",
+                    "modifiedTime": "2020-01-01T00:00:00Z",
+                    "createdTime": "2020-01-01T00:00:00Z",
+                }
+            }
+        ],
+        "newStartPageToken": "t1",
+    }
+
+    since = datetime(2024, 1, 1, 0, 0, 0)
+    files, _ = list_recent_docs(service, since, "t0")
+    assert files == [
+        {
+            "id": "1",
+            "name": "NoSharedTime",
+            "mimeType": "application/vnd.google-apps.document",
+            "modifiedTime": "2020-01-01T00:00:00Z",
+            "createdTime": "2020-01-01T00:00:00Z",
+        }
+    ]
 
 
 def test_app_properties_roundtrip():
