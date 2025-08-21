@@ -98,6 +98,7 @@ def list_recent_changes(
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
             "pageSize": 1000,
+            "includePermissionsForView": "published",
         }
         results = service.changes().list(**params).execute(num_retries=3)
         changes = results.get("changes", [])
@@ -187,6 +188,20 @@ def list_recent_docs(
         if permission_id in f.get("permissionIds", []):
             f.pop("permissionIds", None)
             change_files_filtered.append(f)
+            continue
+
+        if "permissionIds" not in f:
+            fid = f.get("id")
+            if not fid:
+                continue
+            perms = (
+                service.permissions()
+                .list(fileId=fid, fields="permissions(id)")
+                .execute(num_retries=3)
+            )
+            ids = [p.get("id") for p in perms.get("permissions", [])]
+            if permission_id in ids:
+                change_files_filtered.append(f)
     logger.info(
         "Change feed returned %d docs after filtering; new change token %s",
         len(change_files_filtered),
