@@ -223,10 +223,17 @@ def test_list_recent_docs_skips_changes_without_service_permission():
         ],
         "newStartPageToken": "t1",
     }
+    service.files.return_value.get.return_value.execute.return_value = {
+        "id": "1",
+        "capabilities": {"canRead": False, "canComment": False},
+    }
     since = datetime(2024, 1, 1)
     files, tokens = list_recent_docs(service, since, {"user": "t0"})
     assert files == []
     assert tokens == {"user": "t1"}
+    service.files.return_value.get.assert_called_once_with(
+        fileId="1", fields="id,capabilities(canRead,canComment)"
+    )
 
 
 def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
@@ -253,8 +260,9 @@ def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
         ],
         "newStartPageToken": "t1",
     }
-    service.permissions.return_value.list.return_value.execute.return_value = {
-        "permissions": [{"id": "pid"}]
+    service.files.return_value.get.return_value.execute.return_value = {
+        "id": "1",
+        "capabilities": {"canRead": True, "canComment": True},
     }
 
     since = datetime(2024, 1, 1)
@@ -271,8 +279,8 @@ def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
         }
     ]
     assert tokens == {"user": "t1"}
-    service.permissions.return_value.list.assert_called_once_with(
-        fileId="1", fields="permissions(id)"
+    service.files.return_value.get.assert_called_once_with(
+        fileId="1", fields="id,capabilities(canRead,canComment)"
     )
 
 
