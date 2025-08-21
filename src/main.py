@@ -12,6 +12,7 @@ from .groq_client import get_suggestions
 from .time_utils import parse_google_timestamp
 from requests import HTTPError
 from .review import review_document, post_comments, review_comment_replies
+from .document_cache import DocumentCache
 
 # Configure logging
 logging.basicConfig(
@@ -22,6 +23,9 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+DOC_CACHE_PATH = "processed_docs.json"
+_DOC_CACHE = DocumentCache(DOC_CACHE_PATH)
 
 
 def groq_suggest(text: str, context: str) -> dict[str, str]:
@@ -120,7 +124,11 @@ def _latest_timestamp(file: dict[str, Any], current: datetime) -> datetime:
 
 
 def run_once(
-    drive_service: Any, docs_service: Any, since: datetime, page_token: str
+    drive_service: Any,
+    docs_service: Any,
+    since: datetime,
+    page_token: str,
+    doc_cache: DocumentCache | None = None,
 ) -> tuple[datetime, str]:
     """Process documents changed since ``since`` and return new timestamp and token.
 
@@ -129,11 +137,18 @@ def run_once(
     used to query the Drive changes feed for permission updates.
     """
 
+    cache = doc_cache or _DOC_CACHE
+
     logger.info(
         "Starting document review cycle. Checking for documents changed since: %s",
         since,
     )
     logger.info("Using change page token: %s", page_token)
+
+    shared_docs = list_all_shared_docs(drive_service)
+    current_ids = {f.get("id") for f in shared_docs if f.get("id")}
+    new_shared_ids = current_ids - cache.ids
+    extra_files = [f for f in shared_docs if f.get("id") in new_shared_ids]
 
     try:
         files, new_page_token = list_recent_docs(drive_service, since, page_token)
@@ -147,6 +162,13 @@ def run_once(
         files = []
         new_page_token = page_token
 
+    existing_ids = {f.get("id") for f in files}
+    for f in extra_files:
+        fid = f.get("id")
+        if fid and fid not in existing_ids:
+            files.append(f)
+            existing_ids.add(fid)
+
     processed_count = 0
     latest_time = since
     for f in files:
@@ -159,6 +181,9 @@ def run_once(
         processed_count,
         len(files),
     )
+
+    cache.ids = current_ids
+    cache.save()
 
     new_timestamp = max(latest_time, datetime.utcnow())
     logger.info(
@@ -203,7 +228,9 @@ def main() -> None:
             nonlocal since, page_token
             logger.info("=" * 60)
             logger.info("Scheduled job triggered - starting document review")
-            since, page_token = run_once(drive_service, docs_service, since, page_token)
+            since, page_token = run_once(
+                drive_service, docs_service, since, page_token, _DOC_CACHE
+            )
             logger.info("Scheduled job completed")
             logger.info("=" * 60)
         
