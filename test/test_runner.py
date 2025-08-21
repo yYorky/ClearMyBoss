@@ -191,3 +191,37 @@ def test_reshared_docs_are_reprocessed(monkeypatch, tmp_path):
 
     with open(cache.path) as f:
         assert json.load(f) == ["1"]
+
+
+def test_run_once_refreshes_token_on_410(monkeypatch, tmp_path):
+    drive = MagicMock()
+    docs = MagicMock()
+
+    # Permission ID for _get_permission_id
+    drive.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
+    # No modified documents
+    drive.files.return_value.list.return_value.execute.return_value = {"files": []}
+
+    from googleapiclient.errors import HttpError
+    from httplib2 import Response
+
+    error = HttpError(Response({"status": 410}), b"{}")
+    drive.changes.return_value.list.return_value.execute.side_effect = [
+        error,
+        {"changes": [], "newStartPageToken": "t1"},
+    ]
+    drive.changes.return_value.getStartPageToken.return_value.execute.return_value = {
+        "startPageToken": "fresh"
+    }
+
+    monkeypatch.setattr("src.main.list_all_shared_docs", lambda svc: [])
+
+    cache = DocumentCache(tmp_path / "cache.json")
+    since = datetime.utcnow()
+    _, tokens = run_once(drive, docs, since, {"user": "old"}, cache)
+
+    assert tokens == {"user": "t1"}
+    assert drive.changes.return_value.list.call_count == 2
+    assert drive.changes.return_value.getStartPageToken.call_count == 1
