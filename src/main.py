@@ -179,6 +179,8 @@ def run_once(
 
     processed_count = 0
     latest_time = since
+    processed_ids: set[str] = set()
+    successful_ids: set[str] = set()
     for f in files:
         latest_time = _latest_timestamp(f, latest_time)
         fid = f.get("id")
@@ -199,8 +201,10 @@ def run_once(
             drive_id,
             can_comment,
         )
+        processed_ids.add(fid)
         if _process_document(drive_service, docs_service, f):
             processed_count += 1
+            successful_ids.add(fid)
 
     logger.info(
         "Completed review cycle. Successfully processed %d/%d documents",
@@ -208,7 +212,10 @@ def run_once(
         len(files),
     )
 
-    cache.ids = current_ids
+    failed_ids = processed_ids - successful_ids
+    cache.ids.intersection_update(current_ids)
+    cache.ids.difference_update(failed_ids)
+    cache.ids.update(successful_ids)
     cache.save()
 
     new_timestamp = max(latest_time, datetime.utcnow())
