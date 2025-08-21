@@ -19,18 +19,6 @@ def build_drive_service() -> Any:
     return build_service("drive", "v3", SCOPES)
 
 
-def _get_service_account_email(service: Any) -> str:
-    """Return the email address for the authenticated service account."""
-    about = (
-        service.about()
-        .get(fields="user(emailAddress)")
-        .execute(num_retries=3)
-    )
-    email = about.get("user", {}).get("emailAddress", "")
-    logger.info("Service account email: %s", email)
-    return email
-
-
 def _get_permission_id(service: Any) -> str:
     """Return the Drive permission ID for the authenticated service account."""
     about = (
@@ -109,10 +97,9 @@ def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
     """
 
     logger.info("Listing all shared Google Docs")
-    email = _get_service_account_email(service)
     query = (
-        "mimeType='application/vnd.google-apps.document' and ("
-        f"'{email}' in readers or '{email}' in writers or '{email}' in owners)"
+        "mimeType='application/vnd.google-apps.document' "
+        "and sharedWithMe=true and trashed=false"
     )
     files: list[dict[str, Any]] = []
     page: str | None = None
