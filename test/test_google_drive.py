@@ -38,11 +38,11 @@ def test_list_recent_docs_filters_by_time():
 
 
 def test_list_recent_docs_includes_newly_shared_docs():
-    """Documents shared but not modified should still be returned via creation time."""
+    """Docs shared recently should be returned even if created long ago."""
     service = MagicMock()
-    
+
     # First call returns empty (no recently modified docs)
-    # Second call returns the newly accessible doc
+    # Second call returns a document that was created earlier but shared now
     service.files.return_value.list.return_value.execute.side_effect = [
         {"files": []},  # No recently modified docs
         {
@@ -50,17 +50,18 @@ def test_list_recent_docs_includes_newly_shared_docs():
                 {
                     "id": "1",
                     "name": "Shared",
-                    "modifiedTime": "2024-01-01T00:00:00Z",
-                    "createdTime": "2024-01-02T00:00:00Z",  # Recently created
+                    "modifiedTime": "2023-01-01T00:00:00Z",
+                    "createdTime": "2023-01-02T00:00:00Z",
+                    "sharedWithMeTime": "2024-01-02T00:00:00Z",  # Newly shared
                 }
             ]
-        },  # Newly accessible doc
+        },
     ]
-    
+
     since = datetime(2024, 1, 1, 12, 0, 0)
     files = list_recent_docs(service, since)
-    
-    # Should make two calls: one for recently modified, one for all recent docs
+
+    # Should make two calls: one for recently modified, one for all docs
     assert service.files.return_value.list.call_count == 2
     assert files[0]["name"] == "Shared"
 
