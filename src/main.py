@@ -1,7 +1,7 @@
 """Scheduled runner entry point for ClearMyBoss."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 import time
 from typing import Any
@@ -220,7 +220,7 @@ def main() -> None:
             _process_document(drive_service, docs_service, f)
         logger.info("Processed %d pre-existing shared documents", len(shared_docs))
 
-        since = datetime.utcnow()
+        since = datetime.utcnow() - timedelta(days=7)
         logger.info(f"Initial timestamp set to: {since}")
         page_tokens = get_start_page_tokens(drive_service)
         logger.info(f"Initial change tokens set to: {page_tokens}")
