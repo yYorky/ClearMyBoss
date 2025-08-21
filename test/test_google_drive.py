@@ -21,6 +21,9 @@ from src.google_drive import (
 
 def test_list_recent_docs_filters_by_time():
     service = MagicMock()
+    service.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
     service.files.return_value.list.return_value.execute.return_value = {
         "files": [
             {"id": "1", "name": "Doc1", "modifiedTime": "2024-01-01T00:00:00Z"}
@@ -43,7 +46,10 @@ def test_list_recent_docs_filters_by_time():
 def test_list_recent_docs_includes_newly_shared_docs():
     """Docs shared recently should be returned even if created long ago."""
     service = MagicMock()
-
+    service.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
+    
     service.files.return_value.list.return_value.execute.return_value = {"files": []}
     service.changes.return_value.list.return_value.execute.return_value = {
         "changes": [
@@ -55,6 +61,7 @@ def test_list_recent_docs_includes_newly_shared_docs():
                     "modifiedTime": "2023-01-01T00:00:00Z",
                     "createdTime": "2023-01-02T00:00:00Z",
                     "sharedWithMeTime": "2024-01-02T00:00:00Z",
+                    "permissionIds": ["pid"],
                 }
             }
         ],
@@ -72,6 +79,9 @@ def test_list_recent_docs_includes_newly_shared_docs():
 def test_list_recent_docs_parses_microsecond_timestamps():
     """Timestamps with fractional seconds should be parsed correctly."""
     service = MagicMock()
+    service.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
     service.files.return_value.list.return_value.execute.return_value = {
         "files": [
             {
@@ -90,6 +100,7 @@ def test_list_recent_docs_parses_microsecond_timestamps():
                     "mimeType": "application/vnd.google-apps.document",
                     "createdTime": "2024-01-02T00:00:00.654321Z",
                     "modifiedTime": "2024-01-01T00:00:00Z",
+                    "permissionIds": ["pid"],
                 }
             }
         ],
@@ -102,6 +113,9 @@ def test_list_recent_docs_parses_microsecond_timestamps():
 
 def test_list_recent_docs_handles_pagination():
     service = MagicMock()
+    service.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
     # Pages for modified docs query
     file_pages = [{"files": [], "nextPageToken": "t1"}, {"files": []}]
     # Pages for changes feed
@@ -116,6 +130,7 @@ def test_list_recent_docs_handles_pagination():
                         "mimeType": "application/vnd.google-apps.document",
                         "createdTime": "2024-01-02T00:00:00Z",
                         "modifiedTime": "2024-01-01T00:00:00Z",
+                        "permissionIds": ["pid"],
                     }
                 }
             ],
@@ -144,6 +159,9 @@ def test_list_recent_docs_handles_pagination():
 
 def test_list_recent_docs_detects_permission_changes_without_shared_time():
     service = MagicMock()
+    service.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
     service.files.return_value.list.return_value.execute.return_value = {"files": []}
     service.changes.return_value.list.return_value.execute.return_value = {
         "changes": [
@@ -154,6 +172,7 @@ def test_list_recent_docs_detects_permission_changes_without_shared_time():
                     "mimeType": "application/vnd.google-apps.document",
                     "modifiedTime": "2020-01-01T00:00:00Z",
                     "createdTime": "2020-01-01T00:00:00Z",
+                    "permissionIds": ["pid"],
                 }
             }
         ],
@@ -171,6 +190,31 @@ def test_list_recent_docs_detects_permission_changes_without_shared_time():
             "createdTime": "2020-01-01T00:00:00Z",
         }
     ]
+
+
+def test_list_recent_docs_skips_changes_without_service_permission():
+    service = MagicMock()
+    service.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
+    service.files.return_value.list.return_value.execute.return_value = {"files": []}
+    service.changes.return_value.list.return_value.execute.return_value = {
+        "changes": [
+            {
+                "file": {
+                    "id": "1",
+                    "name": "Other",
+                    "mimeType": "application/vnd.google-apps.document",
+                    "permissionIds": ["other"],
+                }
+            }
+        ],
+        "newStartPageToken": "t1",
+    }
+    since = datetime(2024, 1, 1)
+    files, token = list_recent_docs(service, since, "t0")
+    assert files == []
+    assert token == "t1"
 
 
 def test_app_properties_roundtrip():
