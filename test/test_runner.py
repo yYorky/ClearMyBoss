@@ -2,6 +2,7 @@ from datetime import datetime
 from unittest.mock import MagicMock
 
 from src.main import run_once, _process_document, _latest_timestamp
+import src.main as runner
 
 
 def test_run_once_reviews_and_posts(monkeypatch):
@@ -84,3 +85,49 @@ def test_latest_timestamp():
     }
 
     assert _latest_timestamp(file, since) == datetime(2022, 6, 1)
+
+
+def test_main_processes_pre_shared_docs(monkeypatch):
+    drive = MagicMock()
+    drive.changes.return_value.getStartPageToken.return_value.execute.return_value = {
+        "startPageToken": "t0"
+    }
+    docs = MagicMock()
+    monkeypatch.setattr(runner, "build_drive_service", lambda: drive)
+    monkeypatch.setattr(runner, "build_docs_service", lambda: docs)
+    monkeypatch.setattr(runner, "list_all_shared_docs", lambda svc: [{"id": "1"}, {"id": "2"}])
+
+    processed: list[str] = []
+
+    def fake_process(drive_service, docs_service, file):
+        processed.append(file["id"])
+        return True
+
+    monkeypatch.setattr(runner, "_process_document", fake_process)
+    monkeypatch.setattr(runner, "run_once", lambda d, ds, s, t: (s, t))
+
+    import types, sys
+
+    class FakeEvery:
+        @property
+        def minutes(self):
+            return self
+
+        def do(self, func):
+            self.func = func
+            return self
+
+    class FakeSchedule(types.SimpleNamespace):
+        def every(self, *args, **kwargs):
+            return FakeEvery()
+
+        def run_pending(self):
+            raise KeyboardInterrupt()
+
+    fake_schedule = FakeSchedule()
+    monkeypatch.setitem(sys.modules, "schedule", fake_schedule)
+    monkeypatch.setattr(runner.time, "sleep", lambda _x: None)
+
+    runner.main()
+
+    assert processed == ["1", "2"]
