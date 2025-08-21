@@ -269,23 +269,25 @@ def list_recent_docs(
     change_files, new_page_tokens = list_recent_changes_all(service, page_tokens)
     change_files_filtered: list[dict[str, Any]] = []
     for f in change_files:
-        if permission_id in f.get("permissionIds", []):
-            f.pop("permissionIds", None)
-            change_files_filtered.append(f)
+        fid = f.get("id")
+        if not fid:
             continue
-
-        if "permissionIds" not in f:
-            fid = f.get("id")
-            if not fid:
-                continue
-            perms = (
-                service.permissions()
-                .list(fileId=fid, fields="permissions(id)")
+        perm_ids = f.get("permissionIds", [])
+        has_access = permission_id in perm_ids
+        f.pop("permissionIds", None)
+        if not has_access:
+            info = (
+                service.files()
+                .get(fileId=fid, fields="id,capabilities(canRead,canComment)")
                 .execute(num_retries=3)
             )
-            ids = [p.get("id") for p in perms.get("permissions", [])]
-            if permission_id in ids:
-                change_files_filtered.append(f)
+            has_access = (
+                info.get("capabilities", {}).get("canRead") is True
+                if isinstance(info, dict)
+                else False
+            )
+        if has_access:
+            change_files_filtered.append(f)
     logger.info(
         "Change feed returned %d docs after filtering; new change token %s",
         len(change_files_filtered),
