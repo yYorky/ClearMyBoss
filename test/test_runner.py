@@ -59,6 +59,7 @@ def test_process_document_success(monkeypatch):
         posted.append((doc_id, items))
 
     monkeypatch.setattr("src.main.post_comments", fake_post)
+    monkeypatch.setattr("src.main.review_comment_replies", lambda *_args: None)
 
     assert _process_document(drive, docs, file) is True
     assert posted == [("1", [{"suggestion": "s1"}])]

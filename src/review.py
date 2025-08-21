@@ -21,6 +21,8 @@ from .google_drive import (
     update_app_properties,
     reply_to_comment,
     create_comment,
+    list_comments,
+    list_replies,
 )
 
 
@@ -304,3 +306,74 @@ def post_comments(
                     comment.get("id"),
                     document_id,
                 )
+
+
+def review_comment_replies(
+    drive_service: Any, doc_id: str, review_fn: Callable[[str, str], dict[str, Any]]
+) -> None:
+    """Evaluate replies to the service account's comments.
+
+    For each comment thread authored by the service account, new replies are
+    passed to ``review_fn``. The function may return a ``reply`` string to post
+    guidance and a ``resolve`` flag to mark the thread as resolved.
+    """
+
+    try:
+        about = (
+            drive_service.about()
+            .get(fields="user(displayName)")
+            .execute(num_retries=3)
+        )
+        author_name = about.get("user", {}).get("displayName", "")
+    except Exception:
+        logging.exception("Failed to fetch service account display name")
+        author_name = ""
+
+    threads = list_comments(drive_service, doc_id)
+    for thread in threads:
+        if thread.get("author", {}).get("displayName") != author_name:
+            continue
+        comment_id = thread.get("id")
+        replies = list_replies(drive_service, doc_id, comment_id)
+        last_own_reply = -1
+        for idx, rep in enumerate(replies):
+            if rep.get("author", {}).get("displayName") == author_name:
+                last_own_reply = idx
+        for reply in replies[last_own_reply + 1 :]:
+            if reply.get("author", {}).get("displayName") == author_name:
+                continue
+            review = review_fn(reply.get("content", ""), thread.get("content", ""))
+            if not isinstance(review, dict):
+                continue
+            response = review.get("reply") or review.get("response")
+            resolve = review.get("resolve")
+            if response:
+                try:
+                    _retry_with_backoff(
+                        reply_to_comment, drive_service, doc_id, comment_id, response
+                    )
+                except Exception:
+                    logging.exception(
+                        "Failed to reply to comment %s for %s", comment_id, doc_id
+                    )
+            if resolve:
+                try:
+                    def _resolve_comment(
+                        service: Any, file_id: str, comment_id: str
+                    ) -> Any:
+                        return (
+                            service.comments()
+                            .update(
+                                fileId=file_id,
+                                commentId=comment_id,
+                                body={"resolved": True},
+                                fields="id",
+                            )
+                            .execute(num_retries=3)
+                        )
+
+                    _retry_with_backoff(_resolve_comment, drive_service, doc_id, comment_id)
+                except Exception:
+                    logging.exception(
+                        "Failed to resolve comment %s for %s", comment_id, doc_id
+                    )

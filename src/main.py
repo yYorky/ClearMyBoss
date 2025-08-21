@@ -11,7 +11,7 @@ from .google_docs import build_docs_service
 from .groq_client import get_suggestions
 from .time_utils import parse_google_timestamp
 from requests import HTTPError
-from .review import review_document, post_comments
+from .review import review_document, post_comments, review_comment_replies
 
 # Configure logging
 logging.basicConfig(
@@ -89,7 +89,7 @@ def _process_document(
             )
         else:
             logger.info("No comments to post for document '%s'", doc_name)
-
+        review_comment_replies(drive_service, doc_id, groq_suggest)
         return True
     except Exception as e:  # pragma: no cover - logging path
         logger.error(

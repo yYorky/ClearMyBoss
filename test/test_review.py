@@ -1,4 +1,5 @@
 from unittest.mock import MagicMock
+from typing import Any
 
 from src.review import (
     _hash,
@@ -9,6 +10,7 @@ from src.review import (
     process_changed_ranges,
     post_comments,
     review_document,
+    review_comment_replies,
     SUGGESTION_HASHES_KEY,
 )
 
@@ -304,3 +306,58 @@ def test_split_into_byte_chunks_utf8_boundary():
     chunks = split_into_byte_chunks(text, max_bytes)
     assert all(len(chunk.encode("utf-8")) <= max_bytes for chunk in chunks)
     assert "".join(chunks) == text
+
+
+def test_review_comment_replies(monkeypatch):
+    drive = MagicMock()
+    drive.about.return_value.get.return_value.execute.return_value = {
+        "user": {"displayName": "Bot"}
+    }
+
+    def fake_list_comments(service, file_id):
+        return [
+            {"id": "c1", "author": {"displayName": "Bot"}, "content": "orig"},
+            {"id": "c2", "author": {"displayName": "User"}},
+        ]
+
+    def fake_list_replies(service, file_id, comment_id):
+        if comment_id == "c1":
+            return [
+                {"id": "r0", "author": {"displayName": "Bot"}, "content": "old"},
+                {"id": "r1", "author": {"displayName": "User"}, "content": "bad"},
+            ]
+        return []
+
+    reply_calls: list[tuple[str, str, str]] = []
+
+    def fake_reply(service, file_id, comment_id, content):
+        reply_calls.append((file_id, comment_id, content))
+
+    update_calls: list[tuple[str, str]] = []
+
+    def fake_update(fileId=None, commentId=None, body=None, fields=None):
+        update_calls.append((fileId, commentId))
+
+        class Exec:
+            def execute(self, num_retries=3):
+                return {"id": commentId}
+
+        return Exec()
+
+    drive.comments.return_value.update.side_effect = fake_update
+
+    monkeypatch.setattr("src.review.list_comments", fake_list_comments)
+    monkeypatch.setattr("src.review.list_replies", fake_list_replies)
+    monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
+
+    reviewed: list[tuple[str, str]] = []
+
+    def review_fn(text: str, context: str) -> dict[str, Any]:
+        reviewed.append((text, context))
+        return {"reply": "guidance", "resolve": True}
+
+    review_comment_replies(drive, "doc1", review_fn)
+
+    assert reviewed == [("bad", "orig")]
+    assert reply_calls == [("doc1", "c1", "guidance")]
+    assert update_calls == [("doc1", "c1")]
