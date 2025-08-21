@@ -6,6 +6,8 @@ import json
 import logging
 from typing import Any
 
+from googleapiclient.errors import HttpError
+
 from .google_service import build_service
 from .time_utils import parse_google_timestamp
 
@@ -181,7 +183,24 @@ def _list_drive_changes(
         }
         if drive_id:
             params["driveId"] = drive_id
-        results = service.changes().list(**params).execute(num_retries=3)
+        try:
+            results = service.changes().list(**params).execute(num_retries=3)
+        except HttpError as e:
+            status = getattr(getattr(e, "resp", None), "status", None)
+            if status == 410:
+                logger.info("Change token expired; fetching a fresh start token")
+                gsp_params = {"supportsAllDrives": True}
+                if drive_id:
+                    gsp_params["driveId"] = drive_id
+                token = (
+                    service.changes()
+                    .getStartPageToken(**gsp_params)
+                    .execute(num_retries=3)
+                    .get("startPageToken", token)
+                )
+                logger.info("Retrying changes.list with refreshed token %s", token)
+                continue
+            raise
         changes = results.get("changes", [])
         logger.info(
             "Retrieved %d change records (nextPageToken=%s)",
