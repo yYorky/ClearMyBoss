@@ -181,6 +181,26 @@ def run_once(
     latest_time = since
     for f in files:
         latest_time = _latest_timestamp(f, latest_time)
+        fid = f.get("id")
+        drive_id = f.get("driveId")
+        caps = f.get("capabilities")
+        if fid and (drive_id is None or not isinstance(caps, dict)):
+            info = (
+                drive_service.files()
+                .get(fileId=fid, fields="driveId,capabilities(canRead,canComment)")
+                .execute(num_retries=3)
+            )
+            drive_id = info.get("driveId")
+            caps = info.get("capabilities", {})
+        can_read = caps.get("canRead") if isinstance(caps, dict) else None
+        can_comment = caps.get("canComment") if isinstance(caps, dict) else None
+        logger.info(
+            "File %s driveId=%s canRead=%s canComment=%s",
+            fid,
+            drive_id,
+            can_read,
+            can_comment,
+        )
         if _process_document(drive_service, docs_service, f):
             processed_count += 1
 

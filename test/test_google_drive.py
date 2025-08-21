@@ -232,7 +232,7 @@ def test_list_recent_docs_skips_changes_without_service_permission():
     assert files == []
     assert tokens == {"user": "t1"}
     service.files.return_value.get.assert_called_once_with(
-        fileId="1", fields="id,capabilities(canRead,canComment)"
+        fileId="1", fields="id,driveId,capabilities(canRead,canComment)"
     )
 
 
@@ -280,7 +280,7 @@ def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
     ]
     assert tokens == {"user": "t1"}
     service.files.return_value.get.assert_called_once_with(
-        fileId="1", fields="id,capabilities(canRead,canComment)"
+        fileId="1", fields="id,driveId,capabilities(canRead,canComment)"
     )
 
 

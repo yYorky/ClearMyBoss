@@ -26,7 +26,9 @@ def _get_service_account_email(service: Any) -> str:
         .get(fields="user(emailAddress)")
         .execute(num_retries=3)
     )
-    return about.get("user", {}).get("emailAddress", "")
+    email = about.get("user", {}).get("emailAddress", "")
+    logger.info("Service account email: %s", email)
+    return email
 
 
 def _get_permission_id(service: Any) -> str:
@@ -36,34 +38,43 @@ def _get_permission_id(service: Any) -> str:
         .get(fields="user(permissionId)")
         .execute(num_retries=3)
     )
-    return about.get("user", {}).get("permissionId", "")
+    perm_id = about.get("user", {}).get("permissionId", "")
+    logger.info("Service account permission ID: %s", perm_id)
+    return perm_id
 
 
 def list_all_drive_ids(service: Any) -> list[str]:
     """Return IDs for all shared drives accessible to the service account."""
     logger.info("Listing all accessible drive IDs")
     drive_ids: list[str] = []
+    drive_names: list[str] = []
     page: str | None = None
     while True:
         params = {
-            "fields": "nextPageToken, drives(id)",
+            "fields": "nextPageToken, drives(id,name)",
             "pageSize": 100,
         }
         if page:
             params["pageToken"] = page
         results = service.drives().list(**params).execute(num_retries=3)
-        batch = [d.get("id") for d in results.get("drives", []) if d.get("id")]
-        drive_ids.extend(batch)
+        drives = results.get("drives", [])
+        for d in drives:
+            did = d.get("id")
+            name = d.get("name")
+            if did:
+                drive_ids.append(did)
+                if name:
+                    drive_names.append(name)
         logger.info(
             "Retrieved %d drive ids (nextPageToken=%s)",
-            len(batch),
+            len(drives),
             results.get("nextPageToken"),
         )
         page = results.get("nextPageToken")
         if not page:
             break
 
-    logger.info("Total %d drive ids retrieved", len(drive_ids))
+    logger.info("Detected %d drives: %s", len(drive_names), ", ".join(drive_names))
     return drive_ids
 
 
@@ -152,7 +163,7 @@ def _list_drive_changes(
             "fields": (
                 "nextPageToken,newStartPageToken,"
                 "changes(removed,file(id,name,mimeType,modifiedTime,createdTime,"
-                "sharedWithMeTime,permissionIds))"
+                "sharedWithMeTime,permissionIds,driveId,capabilities(canRead,canComment)))"
             ),
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
@@ -241,7 +252,7 @@ def list_recent_docs(
         params = {
             "q": modified_query,
             "fields": (
-                "nextPageToken, files(id,name,modifiedTime,createdTime,sharedWithMeTime)"
+                "nextPageToken, files(id,name,driveId,capabilities(canRead,canComment),modifiedTime,createdTime,sharedWithMeTime)"
             ),
             "supportsAllDrives": True,
             "includeItemsFromAllDrives": True,
@@ -278,7 +289,7 @@ def list_recent_docs(
         if not has_access:
             info = (
                 service.files()
-                .get(fileId=fid, fields="id,capabilities(canRead,canComment)")
+                .get(fileId=fid, fields="id,driveId,capabilities(canRead,canComment)")
                 .execute(num_retries=3)
             )
             has_access = (
@@ -286,6 +297,8 @@ def list_recent_docs(
                 if isinstance(info, dict)
                 else False
             )
+            f["capabilities"] = info.get("capabilities", {})
+            f["driveId"] = info.get("driveId")
         if has_access:
             change_files_filtered.append(f)
     logger.info(
@@ -310,6 +323,14 @@ def list_recent_docs(
     for f in files_by_id.values():
         fid = f.get("id")
         name = f.get("name")
+        caps = f.get("capabilities", {})
+        logger.info(
+            "File %s driveId=%s canRead=%s canComment=%s",
+            fid,
+            f.get("driveId"),
+            caps.get("canRead"),
+            caps.get("canComment"),
+        )
         timestamps = {
             key: f.get(key)
             for key in ("modifiedTime", "createdTime", "sharedWithMeTime")
@@ -347,6 +368,8 @@ def list_recent_docs(
                 "Excluding file %s (%s): %s", fid, name, "; ".join(reasons)
             )
         else:
+            f.pop("capabilities", None)
+            f.pop("driveId", None)
             recent_files.append(f)
 
     logger.info("Returning %d documents after filtering", len(recent_files))
