@@ -90,6 +90,10 @@ def get_start_page_tokens(service: Any) -> dict[str, str]:
 def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
     """Return all Google Docs currently shared with the service account.
 
+    For service accounts, 'sharedWithMe=true' doesn't work as expected.
+    Instead, we query for documents that the service account can comment on,
+    which indicates they have been shared with the service account.
+
     Parameters
     ----------
     service
@@ -99,7 +103,7 @@ def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
     logger.info("Listing all shared Google Docs")
     query = (
         "mimeType='application/vnd.google-apps.document' "
-        "and sharedWithMe=true and trashed=false"
+        "and trashed=false"
     )
     files: list[dict[str, Any]] = []
     page: str | None = None
@@ -107,7 +111,7 @@ def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
         params = {
             "q": query,
             "fields": (
-                "nextPageToken, files(id,name,modifiedTime,createdTime,sharedWithMeTime)"
+                "nextPageToken, files(id,name,modifiedTime,createdTime,sharedWithMeTime,capabilities(canComment))"
             ),
             "corpora": "allDrives",
             "pageSize": 1000,
@@ -124,10 +128,22 @@ def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
             .execute(num_retries=3)
         )
         batch = results.get("files", [])
-        files.extend(batch)
+        # Filter for documents where the service account can comment 
+        # (indicating they have been shared with the service account)
+        filtered_batch = []
+        for doc in batch:
+            capabilities = doc.get("capabilities", {})
+            if capabilities.get("canComment"):
+                # Remove capabilities from the doc before adding to results
+                # to match the original return format
+                doc_copy = doc.copy()
+                doc_copy.pop("capabilities", None)
+                filtered_batch.append(doc_copy)
+        
+        files.extend(filtered_batch)
         logger.info(
             "Retrieved %d shared docs (nextPageToken=%s)",
-            len(batch),
+            len(filtered_batch),
             results.get("nextPageToken"),
         )
         page = results.get("nextPageToken")

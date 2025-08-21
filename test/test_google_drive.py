@@ -23,12 +23,40 @@ from src.google_drive import (
 def test_list_all_shared_docs_handles_pagination():
     service = MagicMock()
     service.files.return_value.list.return_value.execute.side_effect = [
-        {"files": [{"id": "1"}], "nextPageToken": "t1"},
-        {"files": [{"id": "2"}]},
+        {"files": [{"id": "1", "capabilities": {"canComment": True}}], "nextPageToken": "t1"},
+        {"files": [{"id": "2", "capabilities": {"canComment": True}}]},
     ]
     docs = list_all_shared_docs(service)
     assert docs == [{"id": "1"}, {"id": "2"}]
     assert service.files.return_value.list.call_count == 2
+
+
+def test_list_all_shared_docs_filters_by_comment_capability():
+    """Test that only documents with comment capability are returned for service accounts."""
+    service = MagicMock()
+    service.files.return_value.list.return_value.execute.return_value = {
+        "files": [
+            {"id": "1", "name": "HasAccess", "capabilities": {"canComment": True}},
+            {"id": "2", "name": "NoAccess", "capabilities": {"canComment": False}},
+            {"id": "3", "name": "NoCapabilities"},  # Missing capabilities
+        ]
+    }
+    
+    docs = list_all_shared_docs(service)
+    
+    # Should only return documents where canComment is True
+    assert len(docs) == 1
+    assert docs[0]["id"] == "1"
+    assert docs[0]["name"] == "HasAccess"
+    # Capabilities should be removed from result
+    assert "capabilities" not in docs[0]
+    
+    # Verify query doesn't include sharedWithMe=true
+    call_args = service.files.return_value.list.call_args[1]
+    query = call_args["q"]
+    assert "sharedWithMe=true" not in query
+    assert "mimeType='application/vnd.google-apps.document'" in query
+    assert "trashed=false" in query
 
 
 def test_list_recent_docs_filters_by_time():
