@@ -1,7 +1,7 @@
 """Tests for Google Drive helpers including document listing, properties, comments, and revisions."""
 
 from datetime import datetime, timedelta
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, call
 import pytest
 import json
 
@@ -9,6 +9,7 @@ from src.google_drive import (
     download_revision_text,
     get_share_message,
     get_app_properties,
+    list_recent_changes_all,
     list_recent_docs,
     list_all_shared_docs,
     reply_to_comment,
@@ -262,6 +263,48 @@ def test_list_recent_docs_skips_changes_without_service_permission():
     service.files.return_value.get.assert_called_once_with(
         fileId="1", fields="id,driveId,capabilities(canComment)"
     )
+
+
+def test_list_recent_changes_all_discovers_new_drive(monkeypatch):
+    service = MagicMock()
+    drive_ids = iter([[], ["d1"]])
+    monkeypatch.setattr(
+        "src.google_drive.list_all_drive_ids",
+        lambda s: next(drive_ids),
+    )
+
+    service.changes.return_value.getStartPageToken.return_value.execute.side_effect = [
+        {"startPageToken": "d0"}
+    ]
+
+    returns = [
+        ([], "u1"),
+        ([], "u2"),
+        ([{"id": "f1"}], "d1t1"),
+    ]
+
+    def list_changes_side_effect(svc, token, drive_id):
+        return returns.pop(0)
+
+    list_changes_mock = MagicMock(side_effect=list_changes_side_effect)
+    monkeypatch.setattr("src.google_drive._list_drive_changes", list_changes_mock)
+
+    files1, tokens1 = list_recent_changes_all(service, {"user": "u0"})
+    assert files1 == []
+    assert tokens1 == {"user": "u1"}
+
+    files2, tokens2 = list_recent_changes_all(service, tokens1)
+    assert files2 == [{"id": "f1"}]
+    assert tokens2 == {"user": "u2", "d1": "d1t1"}
+
+    service.changes.return_value.getStartPageToken.assert_called_once_with(
+        driveId="d1", supportsAllDrives=True
+    )
+    assert list_changes_mock.call_args_list == [
+        call(service, "u0", None),
+        call(service, "u1", None),
+        call(service, "d0", "d1"),
+    ]
 
 
 def test_list_recent_docs_includes_doc_reshared_without_permission_ids():

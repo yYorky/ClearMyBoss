@@ -239,11 +239,26 @@ def list_recent_changes_all(
 
     all_files: list[dict[str, Any]] = []
     new_tokens: dict[str, str] = {}
-    for key, token in page_tokens.items():
+
+    # Discover any new shared drives each cycle
+    for drive_id in list_all_drive_ids(service):
+        if drive_id not in page_tokens:
+            token = (
+                service.changes()
+                    .getStartPageToken(
+                        driveId=drive_id, supportsAllDrives=True
+                    )
+                    .execute(num_retries=3)
+                    .get("startPageToken", "")
+            )
+            page_tokens[drive_id] = token
+
+    for key, token in list(page_tokens.items()):
         drive_id = None if key == "user" else key
         files, new_token = _list_drive_changes(service, token, drive_id)
         all_files.extend(files)
         new_tokens[key] = new_token
+
     return all_files, new_tokens
 
 
