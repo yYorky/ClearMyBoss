@@ -229,6 +229,53 @@ def test_list_recent_docs_skips_changes_without_service_permission():
     assert token == "t1"
 
 
+def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
+    """A document unshared and then re-shared should be included for review."""
+    service = MagicMock()
+    service.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
+    service.files.return_value.list.return_value.execute.return_value = {"files": []}
+    # Changes feed omits permissionIds for the re-shared doc
+    service.changes.return_value.list.return_value.execute.return_value = {
+        "changes": [
+            {"removed": True},
+            {
+                "file": {
+                    "id": "1",
+                    "name": "Reshared",
+                    "mimeType": "application/vnd.google-apps.document",
+                    "modifiedTime": "2020-01-01T00:00:00Z",
+                    "createdTime": "2020-01-01T00:00:00Z",
+                    "sharedWithMeTime": "2024-01-01T00:00:00Z",
+                }
+            },
+        ],
+        "newStartPageToken": "t1",
+    }
+    service.permissions.return_value.list.return_value.execute.return_value = {
+        "permissions": [{"id": "pid"}]
+    }
+
+    since = datetime(2024, 1, 1)
+    files, token = list_recent_docs(service, since, "t0")
+
+    assert files == [
+        {
+            "id": "1",
+            "name": "Reshared",
+            "mimeType": "application/vnd.google-apps.document",
+            "modifiedTime": "2020-01-01T00:00:00Z",
+            "createdTime": "2020-01-01T00:00:00Z",
+            "sharedWithMeTime": "2024-01-01T00:00:00Z",
+        }
+    ]
+    assert token == "t1"
+    service.permissions.return_value.list.assert_called_once_with(
+        fileId="1", fields="permissions(id)"
+    )
+
+
 def test_app_properties_roundtrip():
     service = MagicMock()
     service.files.return_value.get.return_value.execute.return_value = {
