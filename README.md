@@ -97,6 +97,16 @@ Environment variables are loaded from `.env`:
 | `GOOGLE_OAUTH_TOKEN_JSON`     | Path to store the OAuth token retrieved after consent |
 | `GROQ_CHUNK_SIZE`             | Max bytes per request to Groq (default `20000`) |
 | `GROQ_REQUESTS_PER_MINUTE`    | Requests per minute before throttling (default `10`) |
+
+On Windows, escape backslashes in paths or use forward slashes:
+
+```env
+GOOGLE_OAUTH_CLIENT_SECRET_JSON=C:\path\to\client_secret.json
+GOOGLE_OAUTH_TOKEN_JSON=C:\path\to\token.json
+# or
+GOOGLE_OAUTH_CLIENT_SECRET_JSON=C:/path/to/client_secret.json
+GOOGLE_OAUTH_TOKEN_JSON=C:/path/to/token.json
+```
 ---
 
 ## ▶️ Running
