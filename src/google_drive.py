@@ -22,19 +22,19 @@ def build_drive_service() -> Any:
 
 
 def _get_permission_id(service: Any) -> str:
-    """Return the Drive permission ID for the authenticated service account."""
+    """Return the Drive permission ID for the authenticated account."""
     about = (
         service.about()
         .get(fields="user(permissionId)")
         .execute(num_retries=3)
     )
     perm_id = about.get("user", {}).get("permissionId", "")
-    logger.info("Service account permission ID: %s", perm_id)
+    logger.info("Account permission ID: %s", perm_id)
     return perm_id
 
 
 def list_all_drive_ids(service: Any) -> list[str]:
-    """Return IDs for all shared drives accessible to the service account."""
+    """Return IDs for all shared drives accessible to the authenticated account."""
     logger.info("Listing all accessible drive IDs")
     drive_ids: list[str] = []
     drive_names: list[str] = []
@@ -90,11 +90,11 @@ def get_start_page_tokens(service: Any) -> dict[str, str]:
 
 
 def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
-    """Return all Google Docs currently shared with the service account.
+    """Return all Google Docs currently shared with the authenticated account.
 
-    For service accounts, 'sharedWithMe=true' doesn't work as expected.
-    Instead, we query for documents that the service account can comment on,
-    which indicates they have been shared with the service account.
+    Historically, service accounts could not rely on ``sharedWithMe=true``.
+    We therefore query for documents that the account can comment on, which
+    also works for standard user credentials.
 
     Parameters
     ----------
@@ -130,8 +130,8 @@ def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
             .execute(num_retries=3)
         )
         batch = results.get("files", [])
-        # Filter for documents where the service account can comment 
-        # (indicating they have been shared with the service account)
+        # Filter for documents where the authenticated account can comment
+        # (indicating they have been shared with that account)
         filtered_batch = []
         for doc in batch:
             capabilities = doc.get("capabilities", {})

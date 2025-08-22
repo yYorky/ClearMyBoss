@@ -74,6 +74,9 @@ def test_list_recent_docs_filters_by_time():
         "changes": [],
         "newStartPageToken": "t1",
     }
+    service.drives.return_value.list.return_value.execute.return_value = {
+        "drives": []
+    }
 
     since = datetime(2023, 12, 31, 23, 0, 0)
     files, tokens = list_recent_docs(service, since, {"user": "t0"})
@@ -107,6 +110,9 @@ def test_list_recent_docs_includes_newly_shared_docs():
             }
         ],
         "newStartPageToken": "t1",
+    }
+    service.drives.return_value.list.return_value.execute.return_value = {
+        "drives": []
     }
 
     since = datetime(2024, 1, 1, 12, 0, 0)
@@ -147,6 +153,9 @@ def test_list_recent_docs_parses_microsecond_timestamps():
         ],
         "newStartPageToken": "t1",
     }
+    service.drives.return_value.list.return_value.execute.return_value = {
+        "drives": []
+    }
     since = datetime(2024, 1, 1, 23, 59, 59)
     files, _ = list_recent_docs(service, since, {"user": "t0"})
     assert {f["name"] for f in files} == {"Micro", "CreatedMicro"}
@@ -181,6 +190,7 @@ def test_list_recent_docs_handles_pagination():
 
     service.files.return_value.list.return_value.execute.side_effect = file_pages
     service.changes.return_value.list.return_value.execute.side_effect = change_pages
+    service.drives.return_value.list.return_value.execute.return_value = {"drives": []}
 
     since = datetime(2024, 1, 1, 12, 0, 0)
     files, tokens = list_recent_docs(service, since, {"user": "c0"})
@@ -219,6 +229,9 @@ def test_list_recent_docs_detects_permission_changes_without_shared_time():
         ],
         "newStartPageToken": "t1",
     }
+    service.drives.return_value.list.return_value.execute.return_value = {
+        "drives": []
+    }
 
     since = datetime(2024, 1, 1, 0, 0, 0)
     files, _ = list_recent_docs(service, since, {"user": "t0"})
@@ -255,6 +268,9 @@ def test_list_recent_docs_skips_changes_without_service_permission():
     service.files.return_value.get.return_value.execute.return_value = {
         "id": "1",
         "capabilities": {"canComment": False},
+    }
+    service.drives.return_value.list.return_value.execute.return_value = {
+        "drives": []
     }
     since = datetime(2024, 1, 1)
     files, tokens = list_recent_docs(service, since, {"user": "t0"})
@@ -334,6 +350,9 @@ def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
     service.files.return_value.get.return_value.execute.return_value = {
         "id": "1",
         "capabilities": {"canComment": True},
+    }
+    service.drives.return_value.list.return_value.execute.return_value = {
+        "drives": []
     }
 
     since = datetime(2024, 1, 1)
@@ -433,12 +452,50 @@ def test_list_comments_and_replies():
 
 
 def test_build_drive_service_missing_credentials(monkeypatch):
-    """Should raise a clear error when credential path is not configured."""
+    """Should raise a clear error when client secret path is not configured."""
     monkeypatch.setattr(
-        "src.google_service.settings.GOOGLE_SERVICE_ACCOUNT_JSON", None
+        "src.google_service.settings.GOOGLE_OAUTH_CLIENT_SECRET_JSON", None
+    )
+    monkeypatch.setattr(
+        "src.google_service.settings.GOOGLE_OAUTH_TOKEN_JSON", "/tmp/token.json"
     )
     with pytest.raises(ValueError):
         build_drive_service()
+
+
+def test_build_drive_service_uses_saved_token(monkeypatch, tmp_path):
+    """When a token file exists, credentials should load without running flow."""
+    client = tmp_path / "client.json"
+    token = tmp_path / "token.json"
+    client.write_text("{}")
+    token.write_text("{}")
+
+    creds = MagicMock(valid=True)
+    monkeypatch.setattr(
+        "src.google_service.Credentials.from_authorized_user_file",
+        lambda path, scopes: creds,
+    )
+    build_mock = MagicMock()
+    monkeypatch.setattr("src.google_service.build", build_mock)
+    flow_mock = MagicMock()
+    monkeypatch.setattr(
+        "src.google_service.InstalledAppFlow.from_client_secrets_file", flow_mock
+    )
+
+    monkeypatch.setattr(
+        "src.google_service.settings.GOOGLE_OAUTH_CLIENT_SECRET_JSON",
+        str(client),
+    )
+    monkeypatch.setattr(
+        "src.google_service.settings.GOOGLE_OAUTH_TOKEN_JSON",
+        str(token),
+    )
+
+    service = build_drive_service()
+
+    build_mock.assert_called_once_with("drive", "v3", credentials=creds)
+    assert service is build_mock.return_value
+    flow_mock.assert_not_called()
 
 def test_create_comment_calls_api(region):
     service = MagicMock()
