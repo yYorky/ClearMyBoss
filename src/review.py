@@ -258,8 +258,6 @@ def post_comments(
     """
 
     MAX_BYTES = 4096
-    # Retrieve plain text of the latest revision so we can derive line numbers
-    document_text = download_revision_text(drive_service, document_id, "head")
 
     for item in items:
         lines: list[str] = []
@@ -274,10 +272,7 @@ def post_comments(
         end = item.get("end_index")
         regions = None
         if start is not None and end is not None:
-            start_line = document_text.count("\n", 0, start) + 1
-            end_line = document_text.count("\n", 0, max(end - 1, 0)) + 1
-            line_count = end_line - start_line + 1
-            regions = [{"line": {"n": start_line, "l": line_count}}]
+            regions = [{"segment": {"startIndex": start, "endIndex": end}}]
         try:
             comment = _retry_with_backoff(
                 create_comment,
