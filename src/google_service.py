@@ -3,7 +3,7 @@ from __future__ import annotations
 """Shared Google API service builder."""
 
 from typing import Any
-import os
+from pathlib import Path
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
@@ -47,24 +47,27 @@ def build_service(api: str, version: str, scopes: list[str]) -> Any:
         raise ValueError(
             "GOOGLE_OAUTH_TOKEN_JSON environment variable is not set."
         )
-    if not os.path.exists(client_secret_path):
+    client_secret_path = Path(client_secret_path).expanduser().resolve()
+    token_path = Path(token_path).expanduser().resolve()
+    if not client_secret_path.exists():
         raise FileNotFoundError(
             f"OAuth client secret JSON file not found at {client_secret_path}"
         )
 
     creds: Credentials | None = None
-    if os.path.exists(token_path):
-        creds = Credentials.from_authorized_user_file(token_path, scopes)
+    if token_path.exists():
+        creds = Credentials.from_authorized_user_file(str(token_path), scopes)
 
     if not creds or not creds.valid:
         if creds and creds.expired and creds.refresh_token:
             creds.refresh(Request())
         else:
             flow = InstalledAppFlow.from_client_secrets_file(
-                client_secret_path, scopes
+                str(client_secret_path), scopes
             )
             creds = flow.run_local_server(port=0)
-        with open(token_path, "w") as token_file:
+        token_path.parent.mkdir(parents=True, exist_ok=True)
+        with token_path.open("w") as token_file:
             token_file.write(creds.to_json())
 
     return build(api, version, credentials=creds)
