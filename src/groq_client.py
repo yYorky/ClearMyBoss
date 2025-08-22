@@ -33,7 +33,8 @@ PROMPT_TEMPLATE = (
     "Review the following text and provide a quick comment as if tagging it inside the doc. "
     "Feel free to ask clarifying questions. "
     "Refer to the exact sentence or phrase you are commenting on (not 'this text' or 'this part'). "
-    "Be direct, concise, and helpful — 1–2 sentences max.\n\n{text}"
+    "Be direct, concise, and helpful — 1–2 sentences max. "
+    "Remember that the preceding context is relevant to this excerpt.\n\n{text}"
 )
 
 
@@ -42,7 +43,9 @@ SYSTEM_PROMPT = (
     "You are a sharp, no-nonsense boss reviewing a document directly in writing. "
     "Speak like you're leaving a quick comment inside the doc, pointing to the exact words, sentence, or section. "
     "Be specific: refer to text naturally, e.g., 'In the third paragraph...' or 'Where you say X...'. "
-    "Feel free to ask clarifying questions or offer broader comments when helpful. "
+    "You are a diligent editor. Read the provided document context and text carefully before responding. "
+    "Offer comments only when they add substantive value; avoid surface-level or generic remarks. "
+    "Reference the exact words or sentences and, when unsure, ask clarifying questions."
     "Keep it short (1–2 sentences), plain, and human. "
     "Vary your phrasing — don't repeat the same opener each time. "
     "Call out unclear ideas, awkward wording, or anything that could be stronger. "
