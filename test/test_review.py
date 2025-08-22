@@ -193,14 +193,20 @@ def test_review_document_ignores_empty_suggestions():
 def test_post_comments_calls_create(monkeypatch):
     create_calls = []
     reply_calls = []
+    range_calls = []
 
-    def fake_create(service, file_id, content, revision_id="head", regions=None):
-        create_calls.append((file_id, content, revision_id, regions))
+    def fake_range(service, doc_id, name, start, end, link_marker=True):
+        range_calls.append((doc_id, name, start, end))
+        return "nr1"
+
+    def fake_create(service, file_id, content, quote, ref):
+        create_calls.append((file_id, content, quote, ref))
         return {"id": "c1"}
 
     def fake_reply(service, file_id, comment_id, content):
         reply_calls.append((file_id, comment_id, content))
 
+    monkeypatch.setattr("src.review.create_named_range", fake_range)
     monkeypatch.setattr("src.review.create_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
     monkeypatch.setattr(
@@ -215,23 +221,29 @@ def test_post_comments_calls_create(monkeypatch):
             "end_index": 3,
         }
     ]
-    post_comments("drive", "doc1", items)
-    expected_region = {"segment": {"startIndex": 1, "endIndex": 3}}
-    assert create_calls == [("doc1", "Fix typo", "head", [expected_region])]
+    post_comments("drive", "docs", "doc1", items)
+    assert range_calls == [("doc1", "abcd", 1, 3)]
+    assert create_calls == [("doc1", "Fix typo", "teh", "nr1")]
     assert reply_calls == []
 
 
-def test_post_comments_splits_long_comments(monkeypatch, region):
+def test_post_comments_splits_long_comments(monkeypatch):
     create_calls = []
     reply_calls = []
+    range_calls = []
 
-    def fake_create(service, file_id, content, revision_id="head", regions=None):
-        create_calls.append((file_id, content, revision_id, regions))
+    def fake_range(service, doc_id, name, start, end, link_marker=True):
+        range_calls.append((doc_id, name, start, end))
+        return "nr1"
+
+    def fake_create(service, file_id, content, quote, ref):
+        create_calls.append((file_id, content, quote, ref))
         return {"id": "c1"}
 
     def fake_reply(service, file_id, comment_id, content):
         reply_calls.append((file_id, comment_id, content))
 
+    monkeypatch.setattr("src.review.create_named_range", fake_range)
     monkeypatch.setattr("src.review.create_comment", fake_create)
     monkeypatch.setattr("src.review.reply_to_comment", fake_reply)
     monkeypatch.setattr(
@@ -248,7 +260,7 @@ def test_post_comments_splits_long_comments(monkeypatch, region):
             "end_index": 1,
         }
     ]
-    post_comments("drive", "doc1", items)
+    post_comments("drive", "docs", "doc1", items)
 
     # First chunk is posted as the main comment, remaining as replies
     assert len(create_calls) == 1
@@ -256,7 +268,7 @@ def test_post_comments_splits_long_comments(monkeypatch, region):
     # Ensure the created comment respects size limit
     assert len(create_calls[0][1].encode("utf-8")) <= 4096
     assert len(reply_calls[0][2].encode("utf-8")) <= 4096
-    assert create_calls[0][3] == [region]
+    assert create_calls[0][3] == "nr1"
 
 
 def test_suggestion_hashes_property_total_size_limit():

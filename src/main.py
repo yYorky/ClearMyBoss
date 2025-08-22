@@ -92,7 +92,7 @@ def _process_document(
         )
 
         if items:
-            post_comments(drive_service, doc_id, items)
+            post_comments(drive_service, docs_service, doc_id, items)
             logger.info(
                 "Posted %d comments to document '%s'", len(items), doc_name
             )

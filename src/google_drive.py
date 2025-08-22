@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 from datetime import datetime
-import json
 import logging
 from typing import Any
 
@@ -480,10 +479,10 @@ def create_comment(
     service: Any,
     file_id: str,
     content: str,
-    revision_id: str = "head",
-    regions: list[dict] | None = None,
+    quote: str,
+    ref: str,
 ) -> dict[str, str]:
-    """Create a comment on ``file_id`` optionally anchored to a text range.
+    """Create a comment on ``file_id`` referencing a named range.
 
     Parameters
     ----------
@@ -493,17 +492,15 @@ def create_comment(
         ID of the document to comment on.
     content: str
         Comment text.
-    revision_id: str, optional
-        Target revision ID for anchoring, defaults to ``"head"``.
-    regions: list[dict] | None, optional
-        List of segment dictionaries each with ``startIndex`` and ``endIndex``
-        character offsets identifying the text span to anchor.
+    quote: str
+        Quoted text to display in the comment.
+    ref: str
+        Named range identifier or link label.
     """
-    body: dict[str, Any] = {"content": content}
-    anchor_dict: dict[str, Any] = {"r": revision_id}
-    if regions is not None:
-        anchor_dict["a"] = regions
-    body["anchor"] = json.dumps(anchor_dict)
+    body: dict[str, Any] = {
+        "content": f"{content}\n@NR:{ref}" if ref else content,
+        "quotedFileContent": {"value": quote, "mimeType": "text/plain"},
+    }
     return (
         service.comments()
         .create(fileId=file_id, body=body, fields="id")

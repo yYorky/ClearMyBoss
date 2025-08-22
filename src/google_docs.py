@@ -5,7 +5,8 @@ from typing import Any
 
 from .google_service import build_service
 
-SCOPES = ["https://www.googleapis.com/auth/documents.readonly"]
+# Full Docs scope is required for creating named ranges and inserting markers.
+SCOPES = ["https://www.googleapis.com/auth/documents"]
 
 
 def build_docs_service() -> Any:
@@ -55,3 +56,75 @@ def chunk_paragraphs(paragraphs: list[str], max_chars: int) -> list[str]:
     if current:
         chunks.append("\n".join(current))
     return chunks
+
+
+def create_named_range(
+    service: Any,
+    document_id: str,
+    name: str,
+    start_index: int,
+    end_index: int,
+    link_marker: bool = True,
+) -> str:
+    """Create a named range and optionally insert a linked "🔗" marker.
+
+    Parameters
+    ----------
+    service: Any
+        Authenticated Docs API service.
+    document_id: str
+        ID of the document to update.
+    name: str
+        Human-friendly label for the range.
+    start_index, end_index: int
+        Character offsets that define the range.
+    link_marker: bool, optional
+        When ``True`` (default) a "🔗" character linked to the range is
+        inserted after ``end_index`` so readers can jump to the span.
+    Returns
+    -------
+    str
+        The ``namedRangeId`` assigned by the Docs API.
+    """
+
+    requests = [
+        {
+            "createNamedRange": {
+                "name": name,
+                "range": {"startIndex": start_index, "endIndex": end_index},
+            }
+        }
+    ]
+    result = (
+        service.documents()
+        .batchUpdate(documentId=document_id, body={"requests": requests})
+        .execute(num_retries=3)
+    )
+    named_range_id = (
+        result.get("replies", [{}])[0]
+        .get("createNamedRange", {})
+        .get("namedRangeId", "")
+    )
+
+    if link_marker and named_range_id:
+        marker = "🔗"
+        # Emoji use two UTF-16 code units in Docs indexes
+        marker_len = 2
+        marker_requests = [
+            {"insertText": {"location": {"index": end_index}, "text": marker}},
+            {
+                "updateTextStyle": {
+                    "range": {
+                        "startIndex": end_index,
+                        "endIndex": end_index + marker_len,
+                    },
+                    "textStyle": {"link": {"bookmarkId": named_range_id}},
+                    "fields": "link",
+                }
+            },
+        ]
+        service.documents().batchUpdate(
+            documentId=document_id, body={"requests": marker_requests}
+        ).execute(num_retries=3)
+
+    return named_range_id
