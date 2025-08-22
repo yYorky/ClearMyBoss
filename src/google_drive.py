@@ -2,95 +2,467 @@
 from __future__ import annotations
 
 from datetime import datetime
-import os
-from typing import List, Dict, Any
+import logging
+from typing import Any
 
-from google.oauth2 import service_account
-from googleapiclient.discovery import build
+from googleapiclient.errors import HttpError
 
-from config import settings
+from .google_service import build_service
+from .time_utils import parse_google_timestamp
 
 SCOPES = ["https://www.googleapis.com/auth/drive"]
 
+logger = logging.getLogger(__name__)
+
 
 def build_drive_service() -> Any:
-    """Build an authenticated Drive API service using service account credentials.
+    """Build an authenticated Drive API service."""
+    return build_service("drive", "v3", SCOPES)
 
-    Raises
-    ------
-    ValueError
-        If ``GOOGLE_SERVICE_ACCOUNT_JSON`` is not set in the environment.
-    FileNotFoundError
-        If the path specified by ``GOOGLE_SERVICE_ACCOUNT_JSON`` does not exist.
-    """
 
-    cred_path = settings.GOOGLE_SERVICE_ACCOUNT_JSON
-    if not cred_path:
-        raise ValueError(
-            "GOOGLE_SERVICE_ACCOUNT_JSON environment variable is not set."
-        )
-    if not os.path.exists(cred_path):
-        raise FileNotFoundError(
-            f"Service account JSON file not found at {cred_path}"
-        )
-
-    creds = service_account.Credentials.from_service_account_file(
-        cred_path, scopes=SCOPES
+def _get_permission_id(service: Any) -> str:
+    """Return the Drive permission ID for the authenticated account."""
+    about = (
+        service.about()
+        .get(fields="user(permissionId)")
+        .execute(num_retries=3)
     )
-    service = build("drive", "v3", credentials=creds)
-    return service
+    perm_id = about.get("user", {}).get("permissionId", "")
+    logger.info("Account permission ID: %s", perm_id)
+    return perm_id
 
 
-def list_recent_docs(service: Any, since_time: datetime) -> List[Dict[str, Any]]:
-    """Return a list of Google Docs modified after ``since_time``.
+def list_all_drive_ids(service: Any) -> list[str]:
+    """Return IDs for all shared drives accessible to the authenticated account."""
+    logger.info("Listing all accessible drive IDs")
+    drive_ids: list[str] = []
+    drive_names: list[str] = []
+    page: str | None = None
+    while True:
+        params = {
+            "fields": "nextPageToken, drives(id,name)",
+            "pageSize": 100,
+        }
+        if page:
+            params["pageToken"] = page
+        results = service.drives().list(**params).execute(num_retries=3)
+        drives = results.get("drives", [])
+        for d in drives:
+            did = d.get("id")
+            name = d.get("name")
+            if did:
+                drive_ids.append(did)
+                if name:
+                    drive_names.append(name)
+        logger.info(
+            "Retrieved %d drive ids (nextPageToken=%s)",
+            len(drives),
+            results.get("nextPageToken"),
+        )
+        page = results.get("nextPageToken")
+        if not page:
+            break
+
+    logger.info("Detected %d drives: %s", len(drive_names), ", ".join(drive_names))
+    return drive_ids
+
+
+def get_start_page_tokens(service: Any) -> dict[str, str]:
+    """Return mapping of drive identifiers to change feed start page tokens."""
+    tokens: dict[str, str] = {}
+    user_token = (
+        service.changes()
+        .getStartPageToken(supportsAllDrives=True)
+        .execute(num_retries=3)
+        .get("startPageToken", "")
+    )
+    tokens["user"] = user_token
+    for drive_id in list_all_drive_ids(service):
+        token = (
+            service.changes()
+            .getStartPageToken(driveId=drive_id, supportsAllDrives=True)
+            .execute(num_retries=3)
+            .get("startPageToken", "")
+        )
+        tokens[drive_id] = token
+    return tokens
+
+
+def list_all_shared_docs(service: Any) -> list[dict[str, Any]]:
+    """Return all Google Docs currently shared with the authenticated account.
+
+    Historically, service accounts could not rely on ``sharedWithMe=true``.
+    We therefore query for documents that the account can comment on, which
+    also works for standard user credentials.
 
     Parameters
     ----------
-    service: Authenticated Google Drive service instance.
-    since_time: datetime object representing last run time.
+    service
+        Authenticated Google Drive service instance.
     """
-    iso_time = since_time.isoformat("T") + "Z"
+
+    logger.info("Listing all shared Google Docs")
     query = (
+        "mimeType='application/vnd.google-apps.document' "
+        "and trashed=false"
+    )
+    files: list[dict[str, Any]] = []
+    page: str | None = None
+    while True:
+        params = {
+            "q": query,
+            "fields": (
+                "nextPageToken, files(id,name,modifiedTime,createdTime,sharedWithMeTime,capabilities(canComment))"
+            ),
+            "corpora": "allDrives",
+            "pageSize": 1000,
+        }
+        if page:
+            params["pageToken"] = page
+        results = (
+            service.files()
+            .list(
+                **params,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            .execute(num_retries=3)
+        )
+        batch = results.get("files", [])
+        # Filter for documents where the authenticated account can comment
+        # (indicating they have been shared with that account)
+        filtered_batch = []
+        for doc in batch:
+            capabilities = doc.get("capabilities", {})
+            if capabilities.get("canComment"):
+                # Remove capabilities from the doc before adding to results
+                # to match the original return format
+                doc_copy = doc.copy()
+                doc_copy.pop("capabilities", None)
+                filtered_batch.append(doc_copy)
+        
+        files.extend(filtered_batch)
+        logger.info(
+            "Retrieved %d shared docs (nextPageToken=%s)",
+            len(filtered_batch),
+            results.get("nextPageToken"),
+        )
+        page = results.get("nextPageToken")
+        if not page:
+            break
+
+    logger.info("Total %d shared docs retrieved", len(files))
+    return files
+
+
+def _list_drive_changes(
+    service: Any, page_token: str, drive_id: str | None = None
+) -> tuple[list[dict[str, Any]], str]:
+    """Return Drive change records for a specific drive or the user feed."""
+
+    logger.info(
+        "Fetching Drive changes starting from page token %s (drive_id=%s)",
+        page_token,
+        drive_id or "user",
+    )
+    files: list[dict[str, Any]] = []
+    token = page_token
+    while True:
+        params = {
+            "pageToken": token,
+            "fields": (
+                "nextPageToken,newStartPageToken,"
+                "changes(removed,file(id,name,mimeType,modifiedTime,createdTime,"
+                "sharedWithMeTime,permissionIds,driveId,capabilities(canComment)))"
+            ),
+            "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True,
+            "pageSize": 1000,
+            "includePermissionsForView": "published",
+        }
+        if drive_id:
+            params["driveId"] = drive_id
+        try:
+            results = service.changes().list(**params).execute(num_retries=3)
+        except HttpError as e:
+            status = getattr(getattr(e, "resp", None), "status", None)
+            if status == 410:
+                logger.info("Change token expired; fetching a fresh start token")
+                gsp_params = {"supportsAllDrives": True}
+                if drive_id:
+                    gsp_params["driveId"] = drive_id
+                token = (
+                    service.changes()
+                    .getStartPageToken(**gsp_params)
+                    .execute(num_retries=3)
+                    .get("startPageToken", token)
+                )
+                logger.info("Retrying changes.list with refreshed token %s", token)
+                continue
+            raise
+        changes = results.get("changes", [])
+        logger.info(
+            "Retrieved %d change records (nextPageToken=%s)",
+            len(changes),
+            results.get("nextPageToken"),
+        )
+        for change in changes:
+            if change.get("removed"):
+                continue
+            file = change.get("file")
+            if file and file.get("mimeType") == "application/vnd.google-apps.document":
+                files.append(file)
+        token = results.get("nextPageToken")
+        if not token:
+            new_token = results.get("newStartPageToken", page_token)
+            logger.info(
+                "Finished fetching changes. %d document entries collected. New token %s",
+                len(files),
+                new_token,
+            )
+            return files, new_token
+
+
+def list_recent_changes_all(
+    service: Any, page_tokens: dict[str, str]
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Return aggregated Drive changes for all tracked drives.
+
+    Parameters
+    ----------
+    service
+        Authenticated Google Drive service instance.
+    page_tokens
+        Mapping of ``drive_id`` (or ``"user"``) to their last seen page token.
+    """
+
+    all_files: list[dict[str, Any]] = []
+    new_tokens: dict[str, str] = {}
+
+    # Discover any new shared drives each cycle
+    for drive_id in list_all_drive_ids(service):
+        if drive_id not in page_tokens:
+            token = (
+                service.changes()
+                    .getStartPageToken(
+                        driveId=drive_id, supportsAllDrives=True
+                    )
+                    .execute(num_retries=3)
+                    .get("startPageToken", "")
+            )
+            page_tokens[drive_id] = token
+
+    for key, token in list(page_tokens.items()):
+        drive_id = None if key == "user" else key
+        files, new_token = _list_drive_changes(service, token, drive_id)
+        all_files.extend(files)
+        new_tokens[key] = new_token
+
+    return all_files, new_tokens
+
+
+def list_recent_docs(
+    service: Any, since_time: datetime, page_tokens: dict[str, str]
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    """Return Google Docs changed or shared since ``since_time`` using change tokens.
+
+    Parameters
+    ----------
+    service
+        Authenticated Google Drive service instance.
+    since_time
+        ``datetime`` of the last run. Documents with ``modifiedTime`` after this
+        timestamp are returned.
+    page_tokens
+        Mapping of change page tokens from the previous run for each tracked drive.
+    """
+
+    iso_time = since_time.replace(microsecond=0).isoformat("T") + "Z"
+
+    modified_query = (
         "mimeType='application/vnd.google-apps.document' "
         f"and modifiedTime > '{iso_time}'"
     )
-    results = (
-        service.files()
-        .list(q=query, fields="files(id, name, modifiedTime)")
-        .execute()
+
+    logger.info("Listing docs with modifiedTime after %s", iso_time)
+
+    files: list[dict[str, Any]] = []
+
+    # Fetch recently modified docs
+    file_page: str | None = None
+    while True:
+        params = {
+            "q": modified_query,
+            "fields": (
+                "nextPageToken, files(id,name,driveId,capabilities(canComment),modifiedTime,createdTime,sharedWithMeTime)"
+            ),
+            "supportsAllDrives": True,
+            "includeItemsFromAllDrives": True,
+            "corpora": "allDrives",
+            "pageSize": 1000,
+        }
+        if file_page:
+            params["pageToken"] = file_page
+        results = service.files().list(**params).execute(num_retries=3)
+        batch = results.get("files", [])
+        files.extend(batch)
+        logger.info(
+            "Retrieved %d modified docs (nextPageToken=%s)",
+            len(batch),
+            results.get("nextPageToken"),
+        )
+        file_page = results.get("nextPageToken")
+        if not file_page:
+            break
+
+    logger.info("Total %d docs from modifiedTime query", len(files))
+
+    # Fetch changes to catch newly shared docs
+    permission_id = _get_permission_id(service)
+    change_files, new_page_tokens = list_recent_changes_all(service, page_tokens)
+    change_files_filtered: list[dict[str, Any]] = []
+    for f in change_files:
+        fid = f.get("id")
+        if not fid:
+            continue
+        perm_ids = f.get("permissionIds", [])
+        permission_change = bool(perm_ids)
+        has_access = permission_id in perm_ids
+        f.pop("permissionIds", None)
+        if not has_access:
+            info = (
+                service.files()
+                .get(fileId=fid, fields="id,driveId,capabilities(canComment)")
+                .execute(num_retries=3)
+            )
+            has_access = (
+                info.get("capabilities", {}).get("canComment") is True
+                if isinstance(info, dict)
+                else False
+            )
+            f["capabilities"] = info.get("capabilities", {})
+            f["driveId"] = info.get("driveId")
+        if has_access:
+            if permission_change:
+                f["_include_unconditionally"] = True
+            change_files_filtered.append(f)
+    logger.info(
+        "Change feed returned %d docs after filtering; new change token %s",
+        len(change_files_filtered),
+        new_page_tokens,
     )
-    return results.get("files", [])
+
+    files_by_id = {f["id"]: f for f in files}
+    for f in change_files_filtered:
+        fid = f.get("id")
+        if not fid:
+            continue
+        existing = files_by_id.get(fid)
+        if existing is None:
+            files_by_id[fid] = f
+        else:
+            include = existing.get("_include_unconditionally") or f.get(
+                "_include_unconditionally"
+            )
+            existing.update(f)
+            if include:
+                existing["_include_unconditionally"] = True
+
+    recent_files: list[dict[str, Any]] = []
+    for f in files_by_id.values():
+        fid = f.get("id")
+        name = f.get("name")
+        caps = f.get("capabilities", {})
+        logger.info(
+            "File %s driveId=%s canComment=%s",
+            fid,
+            f.get("driveId"),
+            caps.get("canComment"),
+        )
+        timestamps = {
+            key: f.get(key)
+            for key in ("modifiedTime", "createdTime", "sharedWithMeTime")
+        }
+        logger.debug(
+            "Evaluating file %s (%s) with timestamps %s", fid, name, timestamps
+        )
+        include = f.pop("_include_unconditionally", False)
+        missing_keys = [k for k, v in timestamps.items() if not v]
+        newer_found = False
+        if not include:
+            for key, ts in timestamps.items():
+                if not ts:
+                    continue
+                try:
+                    dt = parse_google_timestamp(ts)
+                except ValueError:
+                    logger.debug(
+                        "File %s (%s) has invalid %s: %s", fid, name, key, ts
+                    )
+                    continue
+                if dt > since_time:
+                    include = True
+                    newer_found = True
+                    break
+        if not include:
+            reasons: list[str] = []
+            if missing_keys:
+                reasons.extend(f"{k} missing" for k in missing_keys)
+            if not newer_found and len(missing_keys) < 3:
+                reasons.append("no timestamps newer than cutoff")
+            if not reasons:
+                reasons.append("no timestamps available")
+            logger.debug(
+                "Excluding file %s (%s): %s", fid, name, "; ".join(reasons)
+            )
+        else:
+            f.pop("capabilities", None)
+            f.pop("driveId", None)
+            recent_files.append(f)
+
+    logger.info("Returning %d documents after filtering", len(recent_files))
+
+    return recent_files, new_page_tokens
 
 
-def get_app_properties(service: Any, file_id: str) -> tuple[Dict[str, str], str]:
+def get_app_properties(service: Any, file_id: str) -> tuple[dict[str, str], str]:
     """Return ``appProperties`` and ``headRevisionId`` for ``file_id``."""
     result = (
         service.files()
         .get(fileId=file_id, fields="appProperties, headRevisionId")
-        .execute()
+        .execute(num_retries=3)
     )
     return result.get("appProperties", {}), result.get("headRevisionId", "")
 
 
 def update_app_properties(
-    service: Any, file_id: str, app_properties: Dict[str, str]
+    service: Any, file_id: str, app_properties: dict[str, str]
 ) -> None:
     """Update ``appProperties`` for ``file_id``."""
     service.files().update(
         fileId=file_id, body={"appProperties": app_properties}
-    ).execute()
+    ).execute(num_retries=3)
 
 
 def download_revision_text(service: Any, file_id: str, revision_id: str) -> str:
     """Download revision content as plain text."""
-    content = (
-        service.revisions()
-        .get(fileId=file_id, revisionId=revision_id, alt="media")
-        .execute()
-    )
+    if revision_id == "head":
+        content = (
+            service.files()
+            .export(fileId=file_id, mimeType="text/plain")
+            .execute(num_retries=3)
+        )
+    else:
+        content = (
+            service.revisions()
+            .get(fileId=file_id, revisionId=revision_id, alt="media")
+            .execute(num_retries=3)
+        )
     if isinstance(content, bytes):
         return content.decode()
-    return content
+    if isinstance(content, str):
+        return content
+    return str(content)
 
 
 def get_share_message(service: Any, file_id: str) -> str:
@@ -98,7 +470,7 @@ def get_share_message(service: Any, file_id: str) -> str:
     result = (
         service.files()
         .get(fileId=file_id, fields="description")
-        .execute()
+        .execute(num_retries=3)
     )
     return result.get("description", "")
 
@@ -107,17 +479,32 @@ def create_comment(
     service: Any,
     file_id: str,
     content: str,
-    start_index: int | None = None,
-    end_index: int | None = None,
-) -> Any:
-    """Create a comment on ``file_id`` anchored to the given range."""
-    body: Dict[str, Any] = {"content": content}
-    if start_index is not None and end_index is not None:
-        body["anchor"] = f"{start_index},{end_index}"
+    quote: str,
+    ref: str,
+) -> dict[str, str]:
+    """Create a comment on ``file_id`` referencing a named range.
+
+    Parameters
+    ----------
+    service: Any
+        Authenticated Drive API service.
+    file_id: str
+        ID of the document to comment on.
+    content: str
+        Comment text.
+    quote: str
+        Quoted text to display in the comment.
+    ref: str
+        Named range identifier or link label.
+    """
+    body: dict[str, Any] = {
+        "content": f"{content}\n@NR:{ref}" if ref else content,
+        "quotedFileContent": {"value": quote, "mimeType": "text/plain"},
+    }
     return (
         service.comments()
         .create(fileId=file_id, body=body, fields="id")
-        .execute()
+        .execute(num_retries=3)
     )
 
 
@@ -129,5 +516,29 @@ def reply_to_comment(
     return (
         service.replies()
         .create(fileId=file_id, commentId=comment_id, body=body, fields="id")
-        .execute()
+        .execute(num_retries=3)
     )
+
+
+def list_comments(service: Any, file_id: str) -> list[dict[str, Any]]:
+    """Return top-level comments for ``file_id``."""
+    result = (
+        service.comments()
+        .list(fileId=file_id, fields="comments(id,author(displayName),content)")
+        .execute(num_retries=3)
+    )
+    return result.get("comments", [])
+
+
+def list_replies(service: Any, file_id: str, comment_id: str) -> list[dict[str, Any]]:
+    """Return replies for a given comment."""
+    result = (
+        service.replies()
+        .list(
+            fileId=file_id,
+            commentId=comment_id,
+            fields="replies(id,author(displayName),content)",
+        )
+        .execute(num_retries=3)
+    )
+    return result.get("replies", [])
