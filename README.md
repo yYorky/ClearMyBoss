@@ -1,5 +1,7 @@
 # 📄 ClearMyBoss
 
+### Work-in-progress
+
 ![Python](https://img.shields.io/badge/Python-3.11-blue?logo=python)
 ![Groq](https://img.shields.io/badge/LLM-Groq-brightgreen?logo=groq)
 ![Google Docs](https://img.shields.io/badge/API-Google%20Docs-blue?logo=google)
