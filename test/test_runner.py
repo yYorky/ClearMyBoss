@@ -245,6 +245,7 @@ def test_run_once_refreshes_token_on_410(monkeypatch, tmp_path):
     drive.changes.return_value.getStartPageToken.return_value.execute.return_value = {
         "startPageToken": "fresh"
     }
+    drive.drives.return_value.list.return_value.execute.return_value = {"drives": []}
 
     monkeypatch.setattr("src.main.list_all_shared_docs", lambda svc: [])
 

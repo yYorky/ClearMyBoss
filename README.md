@@ -12,14 +12,14 @@ People often wonder if AI will replace white-collar workers, but what if it coul
 ### How it works
 
 * Draft a report or proposal in Google Docs.
-* Share it with the service account before sending it to your boss.
+* Authorize the app with your Google account and edit as usual.
 * Get quick, boss-style comments to tidy up your work early.
 
 ---
 
 ## 🎯 Objective
 
-Provide an autonomous **"boss" reviewer** that acts like your manager: it reviews documents shared with a service account and offers direct, helpful feedback without human involvement.
+Provide an autonomous **"boss" reviewer** that acts like your manager: it reviews documents in your Google Drive and offers direct, helpful feedback without human involvement.
 
 ---
 
@@ -93,14 +93,15 @@ Environment variables are loaded from `.env`:
 | Variable                      | Description |
 | ----------------------------- | ------------------------------------------------------------------------------------ |
 | `GROQ_API_KEY`                | Groq API token |
-| `GOOGLE_SERVICE_ACCOUNT_JSON` | Path to service account credentials with permission to comment on shared Docs |
+| `GOOGLE_OAUTH_CLIENT_SECRET_JSON` | Path to OAuth client secret JSON downloaded from Google Cloud |
+| `GOOGLE_OAUTH_TOKEN_JSON`     | Path to store the OAuth token retrieved after consent |
 | `GROQ_CHUNK_SIZE`             | Max bytes per request to Groq (default `20000`) |
 | `GROQ_REQUESTS_PER_MINUTE`    | Requests per minute before throttling (default `10`) |
 ---
 
 ## ▶️ Running
 
-Share or edit a Google Doc with the service account in your credentials (it must have permission to comment). Optional: add background context in the file's **Description** field so the reviewer understands the goal.
+Edit a Google Doc in your Drive and let the authorized app read it. Optional: add background context in the file's **Description** field so the reviewer understands the goal.
 
 ```bash
 pip install -r requirements.txt
