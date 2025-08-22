@@ -13,7 +13,7 @@ import time
 from difflib import SequenceMatcher
 from googleapiclient.errors import HttpError
 
-from .google_docs import chunk_paragraphs, get_document_paragraphs
+from .google_docs import chunk_paragraphs, get_document_paragraphs, create_named_range
 from .google_drive import (
     download_revision_text,
     get_app_properties,
@@ -245,16 +245,17 @@ def review_document(
 
 def post_comments(
     drive_service: Any,
+    docs_service: Any,
     document_id: str,
     items: list[dict[str, str]],
 ) -> None:
     """Post review items as comments on the document.
 
-    Comments contain only AI-generated feedback and are anchored to the
-    relevant text range. If a comment exceeds the 4096 byte limit imposed by
-    the Google Drive API, it is split into multiple parts. The first part is
-    posted as a comment anchored to the text range; subsequent parts are added
-    as replies to the first comment.
+    Comments contain only AI-generated feedback and reference named ranges
+    created in the document. If a comment exceeds the 4096 byte limit imposed
+    by the Google Drive API, it is split into multiple parts. The first part is
+    posted as a comment; subsequent parts are added as replies to the first
+    comment.
     """
 
     MAX_BYTES = 4096
@@ -267,20 +268,31 @@ def post_comments(
         lines.append(item.get("suggestion", ""))
         content = "\n".join(lines)
         parts = split_into_byte_chunks(content, MAX_BYTES)
-        # Post the first part anchored to the text range
+
         start = item.get("start_index")
         end = item.get("end_index")
-        regions = None
+        range_id = ""
         if start is not None and end is not None:
-            regions = [{"segment": {"startIndex": start, "endIndex": end}}]
+            try:
+                range_id = _retry_with_backoff(
+                    create_named_range,
+                    docs_service,
+                    document_id,
+                    item.get("hash", f"range-{start}-{end}"),
+                    start,
+                    end,
+                )
+            except Exception:
+                logging.exception("Failed to create named range for %s", document_id)
+
         try:
             comment = _retry_with_backoff(
                 create_comment,
                 drive_service,
                 document_id,
                 parts[0],
-                revision_id="head",
-                regions=regions,
+                quote=item.get("quote", ""),
+                ref=range_id,
             )
         except Exception:
             logging.exception("Failed to create comment for %s", document_id)

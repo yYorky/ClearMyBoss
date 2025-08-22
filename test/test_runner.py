@@ -28,7 +28,7 @@ def test_run_once_reviews_and_posts(monkeypatch, tmp_path):
 
     posted = []
 
-    def fake_post(drive_service, doc_id, items):
+    def fake_post(drive_service, docs_service, doc_id, items):
         posted.append((doc_id, items))
 
     monkeypatch.setattr("src.main.post_comments", fake_post)
@@ -59,7 +59,7 @@ def test_process_document_success(monkeypatch):
 
     posted: list[tuple[str, list[dict[str, str]]]] = []
 
-    def fake_post(drive_service, doc_id, items):
+    def fake_post(drive_service, docs_service, doc_id, items):
         posted.append((doc_id, items))
 
     monkeypatch.setattr("src.main.post_comments", fake_post)

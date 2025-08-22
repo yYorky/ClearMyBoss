@@ -28,7 +28,10 @@ Provide an autonomous **"boss" reviewer** that acts like your manager: it review
 * 🚀 **Drive & Docs integration** – Polls Google Drive for modified or newly shared docs and retrieves paragraph text.
 * 🔍 **Change tracking** – Detects changes by comparing the latest revision with the last reviewed version.
 * 🤖 **LLM suggestions** – Sends edited text to Groq's Chat Completions API with chunking, retries, and rate limiting.
-* 💬 **Automated comments** – Uses the Google Drive API to anchor comments at precise text offsets.
+* 💬 **Automated comments** – Drive comments can't directly anchor to text, so the
+  reviewer creates Docs *named ranges* and references them in each comment,
+  optionally inserting a tiny "🔗" link target inside the document for easy
+  navigation.
 * 📝 **Context-aware feedback** – Treats a document's description as extra context for the reviewer.
 * ♻️ **Revision-aware deduplication** – Stores the last reviewed revision and hashed suggestions in Drive `appProperties` to skip repeated comments.
 * ⏱ **Scheduled runner** – Runs `main.py` periodically using the `schedule` library.

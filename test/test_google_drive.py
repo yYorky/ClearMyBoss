@@ -3,7 +3,6 @@
 from datetime import datetime, timedelta
 from unittest.mock import MagicMock, call
 import pytest
-import json
 
 from src.google_drive import (
     download_revision_text,
@@ -533,17 +532,16 @@ def test_build_drive_service_uses_saved_token(monkeypatch, tmp_path):
     assert service is build_mock.return_value
     flow_mock.assert_not_called()
 
-def test_create_comment_calls_api(region):
+def test_create_comment_calls_api():
     service = MagicMock()
-    service.comments.return_value.create.return_value.execute.return_value = {"id": "c1"}
-    result = create_comment(service, "doc", "hello", regions=[region])
+    service.comments.return_value.create.return_value.execute.return_value = {
+        "id": "c1"
+    }
+    result = create_comment(service, "doc", "hello", "quote", "nr1")
     assert result == {"id": "c1"}
-    expected_anchor = json.dumps(
-        {"r": "head", "a": [{"segment": {"startIndex": 0, "endIndex": 1}}]}
-    )
     body = {
-        "content": "hello",
-        "anchor": expected_anchor,
+        "content": "hello\n@NR:nr1",
+        "quotedFileContent": {"value": "quote", "mimeType": "text/plain"},
     }
     service.comments.return_value.create.assert_called_once_with(
         fileId="doc", body=body, fields="id"
