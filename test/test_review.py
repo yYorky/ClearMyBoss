@@ -190,7 +190,7 @@ def test_review_document_ignores_empty_suggestions():
     assert update_body["appProperties"]["suggestionHashes"] == "abcd"
 
 
-def test_post_comments_calls_create(monkeypatch, region):
+def test_post_comments_calls_create(monkeypatch):
     create_calls = []
     reply_calls = []
 
@@ -216,7 +216,8 @@ def test_post_comments_calls_create(monkeypatch, region):
         }
     ]
     post_comments("drive", "doc1", items)
-    assert create_calls == [("doc1", "Fix typo", "head", [region])]
+    expected_region = {"segment": {"startIndex": 1, "endIndex": 3}}
+    assert create_calls == [("doc1", "Fix typo", "head", [expected_region])]
     assert reply_calls == []
 
 
