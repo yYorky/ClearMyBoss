@@ -502,9 +502,12 @@ def test_create_comment_calls_api(region):
     service.comments.return_value.create.return_value.execute.return_value = {"id": "c1"}
     result = create_comment(service, "doc", "hello", regions=[region])
     assert result == {"id": "c1"}
+    expected_anchor = json.dumps(
+        {"r": "head", "a": [{"segment": {"startIndex": 0, "endIndex": 1}}]}
+    )
     body = {
         "content": "hello",
-        "anchor": json.dumps({"r": "head", "a": [region]}),
+        "anchor": expected_anchor,
     }
     service.comments.return_value.create.assert_called_once_with(
         fileId="doc", body=body, fields="id"

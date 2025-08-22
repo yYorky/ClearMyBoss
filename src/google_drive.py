@@ -476,7 +476,22 @@ def create_comment(
     revision_id: str = "head",
     regions: list[dict] | None = None,
 ) -> dict[str, str]:
-    """Create a comment on ``file_id`` optionally anchored to a text range."""
+    """Create a comment on ``file_id`` optionally anchored to a text range.
+
+    Parameters
+    ----------
+    service: Any
+        Authenticated Drive API service.
+    file_id: str
+        ID of the document to comment on.
+    content: str
+        Comment text.
+    revision_id: str, optional
+        Target revision ID for anchoring, defaults to ``"head"``.
+    regions: list[dict] | None, optional
+        List of segment dictionaries each with ``startIndex`` and ``endIndex``
+        character offsets identifying the text span to anchor.
+    """
     body: dict[str, Any] = {"content": content}
     anchor_dict: dict[str, Any] = {"r": revision_id}
     if regions is not None:
