@@ -327,6 +327,7 @@ def list_recent_docs(
         if not fid:
             continue
         perm_ids = f.get("permissionIds", [])
+        permission_change = bool(perm_ids)
         has_access = permission_id in perm_ids
         f.pop("permissionIds", None)
         if not has_access:
@@ -343,6 +344,8 @@ def list_recent_docs(
             f["capabilities"] = info.get("capabilities", {})
             f["driveId"] = info.get("driveId")
         if has_access:
+            if permission_change:
+                f["_include_unconditionally"] = True
             change_files_filtered.append(f)
     logger.info(
         "Change feed returned %d docs after filtering; new change token %s",
@@ -355,12 +358,16 @@ def list_recent_docs(
         fid = f.get("id")
         if not fid:
             continue
-        f["_include_unconditionally"] = True
-        if fid not in files_by_id:
+        existing = files_by_id.get(fid)
+        if existing is None:
             files_by_id[fid] = f
         else:
-            files_by_id[fid].update(f)
-            files_by_id[fid]["_include_unconditionally"] = True
+            include = existing.get("_include_unconditionally") or f.get(
+                "_include_unconditionally"
+            )
+            existing.update(f)
+            if include:
+                existing["_include_unconditionally"] = True
 
     recent_files: list[dict[str, Any]] = []
     for f in files_by_id.values():

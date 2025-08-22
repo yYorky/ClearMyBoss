@@ -281,6 +281,42 @@ def test_list_recent_docs_skips_changes_without_service_permission():
     )
 
 
+def test_list_recent_docs_excludes_old_changes_without_permission_ids():
+    """Changes without permission updates should be ignored if older than cutoff."""
+    service = MagicMock()
+    service.about.return_value.get.return_value.execute.return_value = {
+        "user": {"permissionId": "pid"}
+    }
+    service.files.return_value.list.return_value.execute.return_value = {"files": []}
+    service.changes.return_value.list.return_value.execute.return_value = {
+        "changes": [
+            {
+                "file": {
+                    "id": "1",
+                    "name": "OldEdit",
+                    "mimeType": "application/vnd.google-apps.document",
+                    "modifiedTime": "2020-01-01T00:00:00Z",
+                }
+            }
+        ],
+        "newStartPageToken": "t1",
+    }
+    service.files.return_value.get.return_value.execute.return_value = {
+        "id": "1",
+        "capabilities": {"canComment": True},
+    }
+    service.drives.return_value.list.return_value.execute.return_value = {
+        "drives": []
+    }
+    since = datetime(2024, 1, 1)
+    files, tokens = list_recent_docs(service, since, {"user": "t0"})
+    assert files == []
+    assert tokens == {"user": "t1"}
+    service.files.return_value.get.assert_called_once_with(
+        fileId="1", fields="id,driveId,capabilities(canComment)"
+    )
+
+
 def test_list_recent_changes_all_discovers_new_drive(monkeypatch):
     service = MagicMock()
     drive_ids = iter([[], ["d1"]])
@@ -341,7 +377,7 @@ def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
                     "mimeType": "application/vnd.google-apps.document",
                     "modifiedTime": "2020-01-01T00:00:00Z",
                     "createdTime": "2020-01-01T00:00:00Z",
-                    "sharedWithMeTime": "2024-01-01T00:00:00Z",
+                    "sharedWithMeTime": "2024-01-02T00:00:00Z",
                 }
             },
         ],
@@ -365,7 +401,7 @@ def test_list_recent_docs_includes_doc_reshared_without_permission_ids():
             "mimeType": "application/vnd.google-apps.document",
             "modifiedTime": "2020-01-01T00:00:00Z",
             "createdTime": "2020-01-01T00:00:00Z",
-            "sharedWithMeTime": "2024-01-01T00:00:00Z",
+            "sharedWithMeTime": "2024-01-02T00:00:00Z",
         }
     ]
     assert tokens == {"user": "t1"}
